@@ -9,4 +9,7 @@ interface TradeRepository : JpaRepository<Trade, UUID> {
     fun findByCreditCaseIdAndActiveIsTrueOrderByDueDateAsc(creditCaseId: UUID): List<Trade>
 
     fun findByCreditCaseIdAndActiveIsTrue(creditCaseId: UUID): List<Trade>
+
+    /** All trades for a case, active and superseded — the full generation history. */
+    fun findByCreditCaseId(creditCaseId: UUID): List<Trade>
 }
