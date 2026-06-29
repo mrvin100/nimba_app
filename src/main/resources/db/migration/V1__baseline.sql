@@ -1,0 +1,6 @@
+-- Baseline migration for the Nimba schema.
+--
+-- Intentionally empty: it establishes the Flyway migration history starting
+-- point. Module-specific tables are introduced by their own migrations (V2
+-- onward) in the stories that add them (identity, credit case, amortization
+-- schedule).

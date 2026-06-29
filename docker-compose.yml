@@ -1,0 +1,30 @@
+# Backing services (PostgreSQL today, more later). The same file serves any
+# environment: every value comes from the shared POSTGRES_* variables, which the
+# application reads too (see application.yaml), so the database this container
+# creates and the database the app connects to stay in sync. Start with:
+#
+#   docker compose up -d
+#
+# Defaults make a fresh clone come up with no .env; override the variables (see
+# .env.example) for any other environment.
+
+services:
+  postgres:
+    image: postgres:18 # latest stable PostgreSQL major (>= 16 required, NIMBA-5)
+    container_name: nimba-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-nimba}
+      POSTGRES_USER: ${POSTGRES_USER:-nimba}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nimba}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - nimba-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nimba} -d ${POSTGRES_DB:-nimba}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  nimba-postgres-data:

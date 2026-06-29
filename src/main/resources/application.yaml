@@ -1,0 +1,63 @@
+spring:
+  application:
+    name: app
+  servlet:
+    multipart:
+      # An amortization schedule is a few dozen rows; 2 MB is a generous ceiling
+      # (NIMBA-19). Oversized uploads are rejected before parsing.
+      max-file-size: ${CSV_UPLOAD_MAX_FILE_SIZE:2MB}
+      max-request-size: ${CSV_UPLOAD_MAX_FILE_SIZE:2MB}
+  modulith:
+    runtime:
+      verification-enabled: true
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Schema is owned by Flyway migrations, not Hibernate. Validate the mapped
+      # entities against the migrated schema; never auto-generate it.
+      ddl-auto: validate
+  flyway:
+    enabled: true
+  datasource:
+    # The POSTGRES_* variables are the SAME ones docker-compose.yml uses, so the
+    # database the container creates and the database the app connects to cannot
+    # drift. Defaults make a fresh clone run with zero configuration; override the
+    # variables (host, credentials) for staging and production, which run on the
+    # bank's internal infrastructure (on-premise, mono-tenant — see NIMBA-5).
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:nimba}
+    username: ${POSTGRES_USER:nimba}
+    password: ${POSTGRES_PASSWORD:nimba}
+    hikari:
+      # 10 connections comfortably covers the expected concurrency of a single
+      # internal DRI team. Override per environment with DB_POOL_MAX_SIZE.
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
+
+# Health endpoint exposed for uptime monitoring (NIMBA-29); the datasource
+# indicator reflects real database connectivity, not just process liveness.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: ${ACTUATOR_EXPOSED_ENDPOINTS:health,info}
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+api:
+  # Prefix applied to every REST controller (and the security matchers). The API
+  # version lives here only, so a future version is a one-line change.
+  base-path: ${API_BASE_PATH:/api/v1}
+
+auth:
+  # Login throttling (NIMBA-9B): max failed attempts per email and per source IP
+  # within the rolling window before further attempts are rejected.
+  login-rate-limit:
+    max-attempts: ${AUTH_LOGIN_MAX_ATTEMPTS:5}
+    window: ${AUTH_LOGIN_RATE_WINDOW:PT15M}
+
+storage:
+  # Local filesystem root where original uploaded CSV files are retained for audit
+  # (NIMBA-20). On-premise single-instance deployment makes local disk sufficient;
+  # revisit only if a multi-instance topology appears in a later phase.
+  amortization-schedule-dir: ${AMORTIZATION_SCHEDULE_STORAGE_DIR:storage/credit-cases}
