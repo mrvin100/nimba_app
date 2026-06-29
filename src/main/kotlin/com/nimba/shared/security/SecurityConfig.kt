@@ -1,6 +1,7 @@
 package com.nimba.shared.security
 
 import com.nimba.shared.ApiProperties
+import jakarta.servlet.DispatcherType
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.http.HttpStatus
@@ -63,6 +64,12 @@ class SecurityConfig(
             .securityContext { it.securityContextRepository(securityContextRepository) }
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED) }
             .authorizeHttpRequests {
+                // Spring Security applies the filter chain to every dispatcher type.
+                // Internal ERROR/FORWARD/ASYNC dispatches (e.g. the container's
+                // re-dispatch to /error after a controller sends an error status)
+                // must be permitted, otherwise the entry point would rewrite every
+                // error response into a blank 401.
+                it.dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.FORWARD, DispatcherType.ASYNC).permitAll()
                 it.requestMatchers("$base/auth/login").permitAll()
                 it.requestMatchers("/actuator/health/**").permitAll()
                 it.anyRequest().authenticated()

@@ -23,19 +23,29 @@ import org.springframework.web.server.ResponseStatusException
 class AuthService(
     private val authenticationManager: AuthenticationManager,
     private val securityContextRepository: SecurityContextRepository,
+    private val loginRateLimiter: LoginRateLimiter,
 ) {
     fun login(
         request: LoginRequest,
         httpRequest: HttpServletRequest,
         httpResponse: HttpServletResponse,
     ): MeResponse {
+        val clientIp = httpRequest.remoteAddr
+        loginRateLimiter.assertNotLocked(request.email, clientIp)
+
         val authentication =
             try {
                 authenticationManager.authenticate(
                     UsernamePasswordAuthenticationToken(request.email, request.password),
                 )
             } catch (ex: AuthenticationException) {
-                throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "Identifiants invalides", ex)
+                loginRateLimiter.recordFailure(request.email, clientIp)
+                // Do NOT attach `ex` as the cause: Spring Security's
+                // ExceptionTranslationFilter unwraps the cause chain, and finding an
+                // AuthenticationException there would hijack the response through its
+                // entry point, masking this status. A generic message keeps the
+                // failure opaque (no hint whether the email exists).
+                throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "Identifiants invalides")
             }
 
         val context = SecurityContextHolder.createEmptyContext()
@@ -43,6 +53,7 @@ class AuthService(
         SecurityContextHolder.setContext(context)
         securityContextRepository.saveContext(context, httpRequest, httpResponse)
 
+        loginRateLimiter.recordSuccess(request.email)
         return (authentication.principal as AnalystUserDetails).toMeResponse()
     }
 
