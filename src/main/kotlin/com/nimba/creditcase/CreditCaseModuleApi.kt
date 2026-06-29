@@ -13,4 +13,7 @@ interface CreditCaseModuleApi {
     fun findById(id: UUID): CreditCaseInfo?
 
     fun findByCaseNumber(caseNumber: String): CreditCaseInfo?
+
+    /** Flips the case status to TRADES_GENERES once trades have been generated for it. */
+    fun markTradesGenerated(creditCaseId: UUID)
 }

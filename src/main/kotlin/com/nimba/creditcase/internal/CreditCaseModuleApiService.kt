@@ -3,11 +3,13 @@ package com.nimba.creditcase.internal
 import com.nimba.creditcase.CreateCreditCaseCommand
 import com.nimba.creditcase.CreditCaseInfo
 import com.nimba.creditcase.CreditCaseModuleApi
+import com.nimba.creditcase.CreditCaseStatus
 import com.nimba.identity.IdentityModuleApi
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
+import java.time.Instant
 import java.util.UUID
 
 @Service
@@ -41,6 +43,16 @@ class CreditCaseModuleApiService(
 
     @Transactional(readOnly = true)
     override fun findByCaseNumber(caseNumber: String): CreditCaseInfo? = creditCases.findByCaseNumber(caseNumber)?.toCreditCaseInfo()
+
+    @Transactional
+    override fun markTradesGenerated(creditCaseId: UUID) {
+        val case =
+            creditCases
+                .findById(creditCaseId)
+                .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Dossier introuvable") }
+        case.status = CreditCaseStatus.TRADES_GENERES
+        case.updatedAt = Instant.now()
+    }
 }
 
 internal fun CreditCase.toCreditCaseInfo(): CreditCaseInfo =
