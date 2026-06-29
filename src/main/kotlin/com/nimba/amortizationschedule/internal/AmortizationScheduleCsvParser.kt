@@ -77,6 +77,7 @@ class AmortizationScheduleCsvParser {
                                 "En-tête invalide : colonnes manquantes ou mal orthographiées : ${missing.joinToString(", ")}",
                             ),
                         ),
+                        fatal = true,
                     )
                 }
                 var dataRows = 0
@@ -86,6 +87,7 @@ class AmortizationScheduleCsvParser {
                 }
                 if (dataRows == 0) {
                     errors.add(ScheduleError(null, null, "Le fichier ne contient aucune ligne de données."))
+                    return ParseResult(emptyList(), errors, fatal = true)
                 }
             }
         } catch (ex: Exception) {
@@ -95,11 +97,13 @@ class AmortizationScheduleCsvParser {
                     listOf(
                         ScheduleError(null, null, "Le fichier n'est pas encodé en UTF-8 valide. Réenregistrez-le en UTF-8 puis réessayez."),
                     ),
+                    fatal = true,
                 )
             } else {
                 ParseResult(
                     lines,
                     listOf(ScheduleError(null, null, "Le fichier n'a pas pu être lu comme un CSV valide.")),
+                    fatal = true,
                 )
             }
         }

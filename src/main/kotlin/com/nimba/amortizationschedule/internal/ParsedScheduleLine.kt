@@ -31,12 +31,15 @@ data class ParsedScheduleLine(
 
 /**
  * Outcome of parsing a CSV: the typed lines that parsed cleanly and the errors
- * found (each tied to its line). A file with errors still returns the lines that
- * did parse, so the preview can show both.
+ * found (each tied to its line). A file with per-line errors still returns the
+ * lines that did parse, so the preview can show both. [fatal] marks a file that
+ * could not be read as a schedule at all (bad header, non-UTF-8, or no data rows),
+ * which the preview surfaces as a 400 rather than a content preview.
  */
 data class ParseResult(
     val lines: List<ParsedScheduleLine>,
     val errors: List<ScheduleError>,
+    val fatal: Boolean = false,
 ) {
     val hasErrors: Boolean get() = errors.isNotEmpty()
 }
