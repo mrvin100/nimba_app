@@ -1,6 +1,7 @@
 package com.nimba.creditcase.internal
 
 import com.nimba.creditcase.CreditCaseInfo
+import com.nimba.creditcase.CreditCaseStatus
 import com.nimba.creditcase.ProductType
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
@@ -38,3 +39,37 @@ internal fun CreditCaseInfo.toResponse(): CreditCaseResponse =
         currency = currency,
         createdAt = createdAt,
     )
+
+/** Row in the dashboard's credit-case list. */
+data class CreditCaseSummaryResponse(
+    val id: UUID,
+    val caseNumber: String,
+    val clientName: String,
+    val productType: ProductType,
+    val status: CreditCaseStatus,
+    val createdAt: Instant,
+)
+
+internal fun CreditCase.toSummaryResponse(): CreditCaseSummaryResponse =
+    CreditCaseSummaryResponse(
+        id = requireNotNull(id),
+        caseNumber = caseNumber,
+        clientName = clientName,
+        productType = productType,
+        status = status,
+        createdAt = createdAt,
+    )
+
+/**
+ * Stable pagination envelope for list endpoints. Defined explicitly rather than
+ * serializing Spring Data's `Page`, whose JSON shape is not a guaranteed contract.
+ */
+data class PagedResponse<T>(
+    val content: List<T>,
+    val page: Int,
+    val size: Int,
+    val totalElements: Long,
+    val totalPages: Int,
+    val hasNext: Boolean,
+    val hasPrevious: Boolean,
+)

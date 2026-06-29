@@ -1,5 +1,6 @@
 package com.nimba.creditcase.internal
 
+import com.nimba.creditcase.CreditCaseStatus
 import com.nimba.creditcase.ProductType
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -37,6 +38,10 @@ class CreditCase(
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     var id: UUID? = null
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false)
+    var status: CreditCaseStatus = CreditCaseStatus.EN_ATTENTE_AMORTISSEMENT
 
     @Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: Instant = Instant.now()

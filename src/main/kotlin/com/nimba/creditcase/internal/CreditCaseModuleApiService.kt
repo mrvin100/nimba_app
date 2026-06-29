@@ -50,6 +50,7 @@ internal fun CreditCase.toCreditCaseInfo(): CreditCaseInfo =
         clientName = clientName,
         productType = productType,
         currency = currency,
+        status = status,
         createdBy = createdBy,
         createdAt = createdAt,
     )

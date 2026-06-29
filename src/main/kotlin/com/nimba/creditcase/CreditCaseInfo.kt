@@ -14,6 +14,7 @@ data class CreditCaseInfo(
     val clientName: String,
     val productType: ProductType,
     val currency: String,
+    val status: CreditCaseStatus,
     val createdBy: UUID,
     val createdAt: Instant,
 )
