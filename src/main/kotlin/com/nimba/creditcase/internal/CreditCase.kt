@@ -1,0 +1,46 @@
+package com.nimba.creditcase.internal
+
+import com.nimba.creditcase.ProductType
+import jakarta.persistence.Column
+import jakarta.persistence.Entity
+import jakarta.persistence.EnumType
+import jakarta.persistence.Enumerated
+import jakarta.persistence.GeneratedValue
+import jakarta.persistence.GenerationType
+import jakarta.persistence.Id
+import jakarta.persistence.Table
+import java.time.Instant
+import java.util.UUID
+
+/**
+ * A client credit case — the minimal entity an amortization schedule and its
+ * trades attach to in this phase. Deliberately a small subset of the full Prodigy
+ * vision (analysis sheet, guarantees, etc. belong to later epics); it is shaped to
+ * receive those extensions without a destructive migration. [createdBy] is the id
+ * of the DRI analyst who opened it (resolved through the identity module's API).
+ */
+@Entity
+@Table(name = "credit_case")
+class CreditCase(
+    @Column(name = "case_number", nullable = false, unique = true, updatable = false)
+    val caseNumber: String,
+    @Column(name = "client_name", nullable = false)
+    var clientName: String,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "product_type", nullable = false)
+    var productType: ProductType,
+    @Column(name = "currency", nullable = false)
+    var currency: String,
+    @Column(name = "created_by", nullable = false, updatable = false)
+    val createdBy: UUID,
+) {
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    var id: UUID? = null
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    val createdAt: Instant = Instant.now()
+
+    @Column(name = "updated_at", nullable = false)
+    var updatedAt: Instant = Instant.now()
+}
