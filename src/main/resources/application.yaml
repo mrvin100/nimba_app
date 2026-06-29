@@ -1,3 +1,17 @@
+server:
+  servlet:
+    session:
+      # Session cookie carrying the authenticated DRI analyst (NIMBA-9). httpOnly
+      # so it is never readable from JavaScript; SameSite=Strict to blunt CSRF;
+      # secure must be true in production (override SESSION_COOKIE_SECURE) so the
+      # cookie is only sent over HTTPS.
+      cookie:
+        name: NIMBASESSION
+        http-only: true
+        secure: ${SESSION_COOKIE_SECURE:false}
+        same-site: strict
+      timeout: ${SESSION_TIMEOUT:PT8H}
+
 spring:
   application:
     name: app
