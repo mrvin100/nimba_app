@@ -7,24 +7,59 @@
 #
 # Defaults make a fresh clone come up with no .env; override the variables (see
 # .env.example) for any other environment.
-
+name: nimba
 services:
   postgres:
     image: postgres:18 # latest stable PostgreSQL major (>= 16 required, NIMBA-5)
-    container_name: nimba-postgres
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-nimba}
-      POSTGRES_USER: ${POSTGRES_USER:-nimba}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nimba}
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
-    volumes:
-      - nimba-postgres-data:/var/lib/postgresql/data
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports: ["${POSTGRES_PORT}:5432"]
+    # PostgreSQL 18 images store data in a major-version subdirectory, so the
+    # volume is mounted at /var/lib/postgresql (NOT /var/lib/postgresql/data).
+    volumes: ["pgdata:/var/lib/postgresql"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nimba} -d ${POSTGRES_DB:-nimba}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "${MINIO_API_PORT}:9000"
+      - "${MINIO_CONSOLE_PORT}:9001"
+    volumes: ["miniodata:/data"]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # creates the default bucket on startup
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD};
+      mc mb --ignore-existing local/${MINIO_BUCKET};
+      mc anonymous set none local/${MINIO_BUCKET};
+      exit 0;"
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "${MAILPIT_SMTP_PORT}:1025"
+      - "${MAILPIT_UI_PORT}:8025"
+
 volumes:
-  nimba-postgres-data:
+  pgdata:
+  miniodata:

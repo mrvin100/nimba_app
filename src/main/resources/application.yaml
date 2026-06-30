@@ -13,6 +13,11 @@ server:
       timeout: ${SESSION_TIMEOUT:PT8H}
 
 spring:
+  # Import the local .env (same file Docker Compose reads) so `./gradlew bootRun`
+  # and the containers share one source of truth — e.g. POSTGRES_PORT. Optional, so
+  # CI and other environments without a .env fall back to the ${VAR:default} values.
+  config:
+    import: optional:file:.env[.properties]
   application:
     name: app
   servlet:
@@ -38,7 +43,7 @@ spring:
     # drift. Defaults make a fresh clone run with zero configuration; override the
     # variables (host, credentials) for staging and production, which run on the
     # bank's internal infrastructure (on-premise, mono-tenant — see NIMBA-5).
-    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:nimba}
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5433}/${POSTGRES_DB:nimba}
     username: ${POSTGRES_USER:nimba}
     password: ${POSTGRES_PASSWORD:nimba}
     hikari:
