@@ -36,6 +36,8 @@ dependencies {
     implementation("tools.jackson.module:jackson-module-kotlin")
     // Robust CSV parsing for the amortization-schedule upload pipeline (NIMBA-15).
     implementation("org.apache.commons:commons-csv:1.14.1")
+    // OpenAPI contract + Swagger UI (interactive API docs at /swagger-ui.html).
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.13")
     runtimeOnly("org.postgresql:postgresql")
     testImplementation("org.springframework.boot:spring-boot-starter-actuator-test")
     testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
