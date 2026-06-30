@@ -34,7 +34,6 @@ class IdentityModuleTest(
         assertNotNull(info)
         assertEquals("Aïssatou Diallo", info.fullName)
         assertEquals("aissatou.diallo@banque.test", info.email)
-        assertEquals("DRI_ANALYST", info.role)
     }
 
     @Test

@@ -5,6 +5,8 @@ import jakarta.servlet.DispatcherType
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.http.HttpStatus
+import org.springframework.security.access.hierarchicalroles.RoleHierarchy
+import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl
 import org.springframework.security.authentication.AuthenticationManager
 import org.springframework.security.authentication.ProviderManager
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider
@@ -36,6 +38,22 @@ class SecurityConfig(
 ) {
     @Bean
     fun passwordEncoder(): PasswordEncoder = BCryptPasswordEncoder()
+
+    /**
+     * Within each direction a MANAGER inherits MEMBER, so member-level checks pass
+     * for managers without duplicating authorities. Exposed as a bean so it applies
+     * to both URL and method authorization. ADMIN is intentionally separate (it
+     * manages users, not a direction's business).
+     */
+    @Bean
+    fun roleHierarchy(): RoleHierarchy =
+        RoleHierarchyImpl.fromHierarchy(
+            """
+            ROLE_DRI_MANAGER > ROLE_DRI_MEMBER
+            ROLE_DCM_MANAGER > ROLE_DCM_MEMBER
+            ROLE_DRC_MANAGER > ROLE_DRC_MEMBER
+            """.trimIndent(),
+        )
 
     @Bean
     fun securityContextRepository(): SecurityContextRepository = HttpSessionSecurityContextRepository()

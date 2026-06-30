@@ -1,21 +1,29 @@
 package com.nimba.identity.internal
 
+import com.nimba.identity.AccountStatus
+import com.nimba.identity.Department
+import com.nimba.identity.DepartmentRole
+import jakarta.persistence.CollectionTable
 import jakarta.persistence.Column
+import jakarta.persistence.ElementCollection
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
+import jakarta.persistence.FetchType
 import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
+import jakarta.persistence.JoinColumn
 import jakarta.persistence.Table
 import java.time.Instant
 import java.util.UUID
 
 /**
- * A DRI analyst's login identity. The email is the login identifier and is unique
- * at the database level. The password is stored only as a BCrypt hash, never in
- * clear text. Table name is `app_user` because `user` is a reserved word in
- * PostgreSQL.
+ * A platform user's login identity and authorizations. The email is the unique
+ * login id; the password is stored only as a BCrypt hash. Authorizations are a set
+ * of [Membership] (direction + role); [platformAdmin] is the orthogonal global
+ * administrator capability; [status] governs whether the account may authenticate.
+ * Table is `app_user` because `user` is reserved in PostgreSQL.
  */
 @Entity
 @Table(name = "app_user")
@@ -26,14 +34,31 @@ class User(
     val email: String,
     @Column(name = "password_hash", nullable = false)
     var passwordHash: String,
-    @Enumerated(EnumType.STRING)
-    @Column(name = "role", nullable = false)
-    val role: UserRole = UserRole.DRI_ANALYST,
 ) {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     var id: UUID? = null
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false)
+    var status: AccountStatus = AccountStatus.ACTIVE
+
+    @Column(name = "platform_admin", nullable = false)
+    var platformAdmin: Boolean = false
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "user_membership", joinColumns = [JoinColumn(name = "user_id")])
+    var memberships: MutableSet<Membership> = mutableSetOf()
+
     @Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: Instant = Instant.now()
+
+    /** Sets (or replaces) the role for a direction. */
+    fun assign(
+        department: Department,
+        role: DepartmentRole,
+    ) {
+        memberships.removeIf { it.department == department }
+        memberships.add(Membership(department, role))
+    }
 }

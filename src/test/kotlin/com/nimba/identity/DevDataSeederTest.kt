@@ -1,7 +1,10 @@
 package com.nimba.identity
 
 import com.nimba.TestcontainersConfiguration
+import com.nimba.identity.Department
+import com.nimba.identity.DepartmentRole
 import com.nimba.identity.internal.DevDataSeeder
+import com.nimba.identity.internal.Membership
 import com.nimba.identity.internal.UserRepository
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -11,6 +14,7 @@ import org.springframework.context.annotation.Import
 import org.springframework.test.context.TestPropertySource
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /**
  * Verifies the seed runs when enabled and is idempotent. The seed properties are
@@ -35,7 +39,7 @@ class DevDataSeederTest(
         // The runner already executed on startup.
         val seeded = users.findByEmail("seed@nimba.test")
         assertNotNull(seeded)
-        assertEquals("DRI_ANALYST", seeded.role.name)
+        assertTrue(seeded.memberships.contains(Membership(Department.DRI, DepartmentRole.MEMBER)))
 
         // Running again must not create a duplicate.
         seeder.run(DefaultApplicationArguments())

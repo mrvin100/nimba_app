@@ -73,5 +73,7 @@ internal fun AnalystUserDetails.toMeResponse(): MeResponse =
         userId = userId.toString(),
         fullName = fullName,
         email = username,
-        role = role.name,
+        status = status.name,
+        admin = platformAdmin,
+        memberships = memberships.map { MembershipDto(it.department.name, it.role.name) },
     )

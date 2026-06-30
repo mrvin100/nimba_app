@@ -71,13 +71,20 @@ exist with one tenant. See backlog Section 9 for the full rationale. If Nimba/Pr
 is ever offered to multiple banks on shared infrastructure, that decision is revisited
 explicitly — it is not anticipated here.
 
-## Authentication (session cookie, not JWT)
+## Authentication & RBAC (session cookie, not JWT)
 
 Authentication uses **Spring Security with an `httpOnly` session cookie** (NIMBA-9), not
-JWT. A single role exists in this phase: `DRI_ANALYST`. There is no token endpoint, no
-refresh flow, and no multi-role permission system — introducing those before a second
-real role exists would be unjustified anticipation (backlog NIMBA-8). Passwords are
-BCrypt-hashed and never logged in clear text.
+JWT. Passwords are BCrypt-hashed and never logged in clear text.
+
+Authorization is **multi-direction RBAC**: a user holds a set of memberships
+`(Department, DepartmentRole)` — directions `DRI`/`DCM`/`DRC`, roles `MANAGER`/`MEMBER`
+(one role per direction) — plus an orthogonal `platformAdmin` flag. Authorities are
+`ROLE_{DEPARTMENT}_{ROLE}` plus `ROLE_ADMIN`. A **role hierarchy** (`{DEPT}_MANAGER >
+{DEPT}_MEMBER`, the `RoleHierarchy` bean) means a manager passes member checks without
+duplicated authorities; `ADMIN` is separate (manages users, not a direction's business).
+Account `status` (`ACTIVE`/`SUSPENDED`/`REVOKED`) gates login via the principal's
+`isEnabled`/`isAccountNonLocked`. Admin user-management lives **inside the identity
+module**, guarded by `ROLE_ADMIN`. See `memory` / the RBAC design notes.
 
 ## API Conventions
 

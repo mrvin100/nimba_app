@@ -79,7 +79,7 @@ class AuthFlowTest(
         val login = postJson(client, "/api/v1/auth/login", """{"email":"flow@banque.test","password":"Sup3r-Secret"}""")
         assertEquals(200, login.statusCode())
         assertContains(login.body(), "flow@banque.test")
-        assertContains(login.body(), "DRI_ANALYST")
+        assertContains(login.body(), "ACTIVE")
         assertTrue(
             login.headers().allValues("Set-Cookie").any { it.startsWith("NIMBASESSION=") },
             "login must establish a session cookie",

@@ -8,9 +8,16 @@ data class LoginRequest(
     @field:NotBlank val password: String,
 )
 
+data class MembershipDto(
+    val department: String,
+    val role: String,
+)
+
 data class MeResponse(
     val userId: String,
     val fullName: String,
     val email: String,
-    val role: String,
+    val status: String,
+    val admin: Boolean,
+    val memberships: List<MembershipDto>,
 )

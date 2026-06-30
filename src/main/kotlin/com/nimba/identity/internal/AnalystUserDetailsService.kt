@@ -7,7 +7,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 /**
- * Loads a DRI analyst by email for Spring Security's authentication provider. The
+ * Loads a user by email for Spring Security's authentication provider. The
  * exception message is deliberately generic and never reveals whether the email
  * exists — the controller maps any authentication failure to a single "invalid
  * credentials" response.
@@ -22,7 +22,9 @@ class AnalystUserDetailsService(
         return AnalystUserDetails(
             userId = requireNotNull(user.id),
             fullName = user.fullName,
-            role = user.role,
+            memberships = user.memberships.toSet(),
+            platformAdmin = user.platformAdmin,
+            status = user.status,
             email = user.email,
             passwordHash = user.passwordHash,
         )

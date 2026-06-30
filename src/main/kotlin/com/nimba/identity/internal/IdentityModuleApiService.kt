@@ -19,5 +19,4 @@ internal fun User.toUserInfo(): UserInfo =
         id = requireNotNull(id),
         fullName = fullName,
         email = email,
-        role = role.name,
     )
