@@ -93,6 +93,8 @@ class SecurityConfig(
                 // Interactive API docs (springdoc). Exposed for developer use; a
                 // production deployment can disable springdoc via configuration.
                 it.requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**").permitAll()
+                // Admin user-management is restricted to platform administrators.
+                it.requestMatchers("$base/admin/**").hasRole("ADMIN")
                 it.anyRequest().authenticated()
             }.exceptionHandling { it.authenticationEntryPoint(HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)) }
             // A dedicated REST endpoint (`/auth/logout`) handles logout, so the
