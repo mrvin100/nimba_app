@@ -27,6 +27,7 @@ data class CreditCaseResponse(
     val clientName: String,
     val productType: ProductType,
     val currency: String,
+    val status: CreditCaseStatus,
     val createdAt: Instant,
 )
 
@@ -37,6 +38,7 @@ internal fun CreditCaseInfo.toResponse(): CreditCaseResponse =
         clientName = clientName,
         productType = productType,
         currency = currency,
+        status = status,
         createdAt = createdAt,
     )
 
