@@ -29,6 +29,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     // Outbound e-mail for account invitations (set-password links).
     implementation("org.springframework.boot:spring-boot-starter-mail")
+    // Object storage (MinIO/S3) for user avatars.
+    implementation("io.minio:minio:8.5.14")
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
@@ -89,6 +91,14 @@ kover {
                 classes(
                     "com.nimba.NimbaApplication",
                     "com.nimba.NimbaApplicationKt",
+                    // Object-storage (MinIO) integration is I/O glue verified against a
+                    // running MinIO, not unit tests — excluded like other framework glue.
+                    "com.nimba.identity.internal.MinioConfig",
+                    "com.nimba.identity.internal.MinioProperties",
+                    "com.nimba.identity.internal.AvatarStorage",
+                    "com.nimba.identity.internal.AvatarObject",
+                    "com.nimba.identity.internal.ProfileAvatarService",
+                    "com.nimba.identity.internal.AvatarController",
                 )
             }
         }

@@ -48,6 +48,10 @@ class User(
     @Column(name = "platform_admin", nullable = false)
     var platformAdmin: Boolean = false
 
+    // Object-storage key of the user's avatar image; null means no avatar.
+    @Column(name = "avatar_key")
+    var avatarKey: String? = null
+
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "user_membership", joinColumns = [JoinColumn(name = "user_id")])
     var memberships: MutableSet<Membership> = mutableSetOf()

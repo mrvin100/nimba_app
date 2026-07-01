@@ -23,6 +23,7 @@ class AnalystUserDetails(
     val status: AccountStatus,
     private val email: String,
     private val passwordHash: String?,
+    val avatarKey: String? = null,
 ) : UserDetails,
     AuthenticatedUser {
     override fun getAuthorities(): Collection<GrantedAuthority> {

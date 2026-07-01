@@ -27,6 +27,7 @@ class AnalystUserDetailsService(
             status = user.status,
             email = user.email,
             passwordHash = user.passwordHash,
+            avatarKey = user.avatarKey,
         )
     }
 }

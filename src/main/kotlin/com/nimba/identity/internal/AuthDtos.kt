@@ -19,5 +19,6 @@ data class MeResponse(
     val email: String,
     val status: String,
     val admin: Boolean,
+    val hasAvatar: Boolean,
     val memberships: List<MembershipDto>,
 )

@@ -97,6 +97,13 @@ nimba:
     # Feature switch: when false, invitations are persisted but no e-mail is sent
     # (useful for tests and environments without an SMTP relay).
     enabled: ${MAIL_ENABLED:true}
+  minio:
+    # Object storage for user avatars. Defaults target the docker-compose MinIO;
+    # credentials/bucket reuse the same MINIO_* variables as the container.
+    endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    access-key: ${MINIO_ROOT_USER:nimba}
+    secret-key: ${MINIO_ROOT_PASSWORD:nimba-secret}
+    bucket: ${MINIO_BUCKET:nimba}
 
 storage:
   # Local filesystem root where original uploaded CSV files are retained for audit

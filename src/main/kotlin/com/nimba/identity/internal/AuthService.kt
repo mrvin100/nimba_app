@@ -24,6 +24,7 @@ class AuthService(
     private val authenticationManager: AuthenticationManager,
     private val securityContextRepository: SecurityContextRepository,
     private val loginRateLimiter: LoginRateLimiter,
+    private val users: UserRepository,
 ) {
     fun login(
         request: LoginRequest,
@@ -65,7 +66,15 @@ class AuthService(
         SecurityContextHolder.clearContext()
     }
 
-    fun me(authentication: Authentication): MeResponse = (authentication.principal as AnalystUserDetails).toMeResponse()
+    fun me(authentication: Authentication): MeResponse {
+        // Load fresh so the response reflects live changes (name, avatar) made this
+        // session, not just what was captured in the principal at login.
+        val principal = authentication.principal as AnalystUserDetails
+        return users
+            .findById(principal.userId)
+            .orElseThrow { ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentification requise") }
+            .toMeResponse()
+    }
 }
 
 internal fun AnalystUserDetails.toMeResponse(): MeResponse =
@@ -75,6 +84,7 @@ internal fun AnalystUserDetails.toMeResponse(): MeResponse =
         email = username,
         status = status.name,
         admin = platformAdmin,
+        hasAvatar = avatarKey != null,
         memberships = memberships.map { MembershipDto(it.department.name, it.role.name) },
     )
 
@@ -85,5 +95,6 @@ internal fun User.toMeResponse(): MeResponse =
         email = email,
         status = status.name,
         admin = platformAdmin,
+        hasAvatar = avatarKey != null,
         memberships = memberships.map { MembershipDto(it.department.name, it.role.name) },
     )
