@@ -101,6 +101,9 @@ kover {
                     "com.nimba.identity.internal.AvatarObject",
                     "com.nimba.identity.internal.ProfileAvatarService",
                     "com.nimba.identity.internal.AvatarController",
+                    "com.nimba.identity.internal.OrganizationLogoStorage",
+                    "com.nimba.identity.internal.OrganizationLogoService",
+                    "com.nimba.identity.internal.OrganizationLogoObject",
                 )
             }
         }

@@ -9,6 +9,7 @@ data class OrganizationResponse(
     val organizationName: String,
     val senderName: String,
     val senderEmail: String,
+    val hasLogo: Boolean,
     val updatedAt: Instant,
 )
 
@@ -23,5 +24,6 @@ internal fun OrganizationSettings.toResponse() =
         organizationName = organizationName,
         senderName = senderName,
         senderEmail = senderEmail,
+        hasLogo = logoKey != null,
         updatedAt = updatedAt,
     )
