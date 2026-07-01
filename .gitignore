@@ -46,3 +46,6 @@ storage/
 .env
 .env.*
 !.env.example
+
+# Application log files (NIMBA-28)
+logs/
