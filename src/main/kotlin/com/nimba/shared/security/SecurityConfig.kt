@@ -89,6 +89,13 @@ class SecurityConfig(
                 // error response into a blank 401.
                 it.dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.FORWARD, DispatcherType.ASYNC).permitAll()
                 it.requestMatchers("$base/auth/login").permitAll()
+                // Account provisioning entry points are public by necessity: the
+                // one-time first-admin bootstrap (self-disables once an admin exists)
+                // and the invitation set-password flow (the user has no credentials
+                // yet). All three are guarded by their own service-side checks.
+                it.requestMatchers("$base/auth/bootstrap").permitAll()
+                it.requestMatchers("$base/auth/invitations/**").permitAll()
+                it.requestMatchers("$base/auth/set-password").permitAll()
                 it.requestMatchers("/actuator/health/**").permitAll()
                 // Interactive API docs (springdoc). Exposed for developer use; a
                 // production deployment can disable springdoc via configuration.

@@ -32,8 +32,10 @@ class User(
     var fullName: String,
     @Column(name = "email", nullable = false, unique = true)
     val email: String,
-    @Column(name = "password_hash", nullable = false)
-    var passwordHash: String,
+    // Null until the user sets a password via their invitation (set-password link).
+    // A user without a password hash cannot authenticate.
+    @Column(name = "password_hash")
+    var passwordHash: String? = null,
 ) {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -52,6 +54,10 @@ class User(
 
     @Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: Instant = Instant.now()
+
+    /** A user who has not yet set a password (invitation not consumed). */
+    val pending: Boolean
+        get() = passwordHash == null
 
     /** Sets (or replaces) the role for a direction. */
     fun assign(

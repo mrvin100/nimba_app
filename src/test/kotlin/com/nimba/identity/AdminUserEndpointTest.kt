@@ -1,6 +1,7 @@
 package com.nimba.identity
 
 import com.nimba.TestcontainersConfiguration
+import com.nimba.identity.internal.InvitationRepository
 import com.nimba.identity.internal.User
 import com.nimba.identity.internal.UserRepository
 import org.junit.jupiter.api.Test
@@ -18,9 +19,13 @@ import kotlin.test.assertContains
 import kotlin.test.assertEquals
 
 @Import(TestcontainersConfiguration::class)
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    properties = ["nimba.mail.enabled=false"],
+)
 class AdminUserEndpointTest(
     @Autowired private val users: UserRepository,
+    @Autowired private val invitations: InvitationRepository,
     @Autowired private val passwordEncoder: PasswordEncoder,
     @Value("\${local.server.port}") private val port: Int,
 ) {
@@ -54,8 +59,19 @@ class AdminUserEndpointTest(
         request: HttpRequest,
     ) = client.send(request, HttpResponse.BodyHandlers.ofString())
 
+    private fun login(
+        email: String,
+        password: String,
+    ) = send(
+        HttpClient.newBuilder().cookieHandler(CookieManager()).build(),
+        req("/api/v1/auth/login")
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString("""{"email":"$email","password":"$password"}"""))
+            .build(),
+    )
+
     @Test
-    fun `admin creates, lists, and suspends a user; suspended user cannot log in`() {
+    fun `admin invites a user who activates via set-password, then is suspended`() {
         seed("admin@nimba.test") { it.platformAdmin = true }
         val admin = clientFor("admin@nimba.test")
 
@@ -66,37 +82,53 @@ class AdminUserEndpointTest(
                     .header("Content-Type", "application/json")
                     .POST(
                         HttpRequest.BodyPublishers.ofString(
-                            """{"fullName":"Nouvel Analyste","email":"created@nimba.test","password":"New-Password-1",
+                            """{"fullName":"Nouvel Analyste","email":"created@nimba.test",
                                "admin":false,"memberships":[{"department":"DRI","role":"MEMBER"}]}""",
                         ),
                     ).build(),
             )
         assertEquals(201, create.statusCode(), create.body())
         assertContains(create.body(), "created@nimba.test")
+        assertContains(create.body(), "\"pending\":true")
 
         val list = send(admin, req("/api/v1/admin/users").GET().build())
         assertEquals(200, list.statusCode())
         assertContains(list.body(), "created@nimba.test")
 
-        // The new user can log in while active.
+        // No password yet: the invited user cannot log in.
+        assertEquals(401, login("created@nimba.test", "New-Password-1").statusCode())
+
+        // Consume the invitation to set the password, then login succeeds.
+        val userId = requireNotNull(users.findByEmail("created@nimba.test")?.id)
+        val token = requireNotNull(invitations.findAll().first { it.userId == userId }.token)
+        val setPassword =
+            send(
+                HttpClient.newBuilder().build(),
+                req("/api/v1/auth/set-password")
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("""{"token":"$token","password":"New-Password-1"}"""))
+                    .build(),
+            )
+        assertEquals(200, setPassword.statusCode(), setPassword.body())
+
         val newUser = clientFor("created@nimba.test", "New-Password-1")
         assertEquals(200, send(newUser, req("/api/v1/auth/me").GET().build()).statusCode())
 
-        // Admin suspends them.
-        val id = requireNotNull(users.findByEmail("created@nimba.test")?.id)
-        val suspend = send(admin, req("/api/v1/admin/users/$id/suspend").POST(HttpRequest.BodyPublishers.noBody()).build())
+        // Admin suspends them; a suspended account can no longer authenticate.
+        val suspend = send(admin, req("/api/v1/admin/users/$userId/suspend").POST(HttpRequest.BodyPublishers.noBody()).build())
         assertEquals(200, suspend.statusCode())
+        assertEquals(401, login("created@nimba.test", "New-Password-1").statusCode())
+    }
 
-        // A suspended account can no longer authenticate.
-        val blocked =
-            send(
-                HttpClient.newBuilder().cookieHandler(CookieManager()).build(),
-                req("/api/v1/auth/login")
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString("""{"email":"created@nimba.test","password":"New-Password-1"}"""))
-                    .build(),
-            )
-        assertEquals(401, blocked.statusCode())
+    @Test
+    fun `an admin cannot suspend their own account`() {
+        seed("self-admin@nimba.test") { it.platformAdmin = true }
+        val admin = clientFor("self-admin@nimba.test")
+        val id = requireNotNull(users.findByEmail("self-admin@nimba.test")?.id)
+
+        val response = send(admin, req("/api/v1/admin/users/$id/suspend").POST(HttpRequest.BodyPublishers.noBody()).build())
+
+        assertEquals(400, response.statusCode(), response.body())
     }
 
     @Test

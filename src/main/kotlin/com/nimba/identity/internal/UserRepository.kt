@@ -7,4 +7,7 @@ interface UserRepository : JpaRepository<User, UUID> {
     fun findByEmail(email: String): User?
 
     fun existsByEmail(email: String): Boolean
+
+    /** Whether any platform administrator exists (gates the one-time bootstrap). */
+    fun existsByPlatformAdminTrue(): Boolean
 }

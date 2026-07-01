@@ -22,7 +22,7 @@ class AnalystUserDetails(
     val platformAdmin: Boolean,
     val status: AccountStatus,
     private val email: String,
-    private val passwordHash: String,
+    private val passwordHash: String?,
 ) : UserDetails,
     AuthenticatedUser {
     override fun getAuthorities(): Collection<GrantedAuthority> {
@@ -31,7 +31,9 @@ class AnalystUserDetails(
         return authorities
     }
 
-    override fun getPassword(): String = passwordHash
+    // Empty when the account has no password yet (invitation pending); BCrypt never
+    // matches an empty hash, so such an account simply cannot authenticate.
+    override fun getPassword(): String = passwordHash ?: ""
 
     override fun getUsername(): String = email
 

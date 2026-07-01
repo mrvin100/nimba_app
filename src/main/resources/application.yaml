@@ -29,6 +29,17 @@ spring:
   modulith:
     runtime:
       verification-enabled: true
+  mail:
+    # SMTP relay for invitation e-mails. Defaults target the local Mailpit
+    # container (docker-compose); set the real relay per environment. Sending
+    # failures never block account creation (the invitation is still persisted).
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${MAIL_SMTP_AUTH:false}
+      mail.smtp.starttls.enable: ${MAIL_SMTP_STARTTLS:false}
   jpa:
     open-in-view: false
     hibernate:
@@ -76,13 +87,16 @@ auth:
     window: ${AUTH_LOGIN_RATE_WINDOW:PT15M}
 
 nimba:
-  # Development/staging seed (NIMBA-9C). Disabled by default; never enable in
-  # production. The password comes from the environment and is never committed.
-  seed:
-    enabled: ${NIMBA_SEED_ENABLED:false}
-    dri-name: ${NIMBA_SEED_DRI_NAME:Analyste DRI}
-    dri-email: ${NIMBA_SEED_DRI_EMAIL:analyste@nimba.local}
-    dri-password: ${NIMBA_SEED_DRI_PASSWORD:}
+  app:
+    # Public base URL of the frontend, used to build the set-password link in
+    # invitation e-mails (e.g. {base}/set-password?token=...).
+    frontend-base-url: ${APP_FRONTEND_BASE_URL:http://localhost:3000}
+    # How long an invitation / set-password token stays valid (ISO-8601 duration).
+    invitation-ttl: ${INVITATION_TTL:P7D}
+  mail:
+    # Feature switch: when false, invitations are persisted but no e-mail is sent
+    # (useful for tests and environments without an SMTP relay).
+    enabled: ${MAIL_ENABLED:true}
 
 storage:
   # Local filesystem root where original uploaded CSV files are retained for audit
