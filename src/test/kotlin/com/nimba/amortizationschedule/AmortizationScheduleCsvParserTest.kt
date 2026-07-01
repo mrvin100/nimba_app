@@ -124,6 +124,24 @@ class AmortizationScheduleCsvParserTest {
     }
 
     @Test
+    fun `reads a single comma as a thousands separator in a comma-delimited file`() {
+        // The real Excel "CSV UTF-8 (comma delimited)" export quotes grouped amounts.
+        // A six-digit value like "305,257" must be the integer 305257, not the decimal
+        // 305.257 — otherwise capital = equipement+assurance+tracking+immatriculation
+        // breaks by hundreds of thousands (the ETS OC ET FRÈRES regression).
+        val commaHeader = header.replace(';', ',')
+        val row =
+            """2,06/01/2026,"23,558,384","70,209,106","5,321,012","1,214,923","305,257","77,050,298","100,608,681","4,240,509","104,849,190","1,942,239,730""""
+        val result = parse("$commaHeader\n$row")
+
+        assertFalse(result.hasErrors, "${result.errors}")
+        val line = result.lines.single()
+        assertEquals(BigDecimal("305257"), line.immatriculation)
+        assertEquals(BigDecimal("77050298"), line.capital)
+        assertEquals(BigDecimal("23558384"), line.interet)
+    }
+
+    @Test
     fun `reports a clear error for non UTF-8 content rather than crashing`() {
         val bytes = "$header\n".toByteArray(Charsets.UTF_8) + byteArrayOf(0xFF.toByte(), 0xFE.toByte())
 
