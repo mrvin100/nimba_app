@@ -16,9 +16,9 @@ import com.nimba.identity.internal.OrganizationSettingsService
 import com.nimba.identity.internal.ProfileService
 import com.nimba.identity.internal.PublicOrganizationController
 import com.nimba.identity.internal.SetPasswordRequest
-import com.nimba.identity.internal.UpdateProfileRequest
 import com.nimba.identity.internal.TeamService
 import com.nimba.identity.internal.UpdateOrganizationRequest
+import com.nimba.identity.internal.UpdateProfileRequest
 import com.nimba.identity.internal.User
 import com.nimba.identity.internal.UserRepository
 import org.junit.jupiter.api.AfterEach
@@ -128,6 +128,18 @@ class AccountProvisioningTest(
                 .single()
                 .role.name,
         )
+
+        // The manager sees the invited member and can change their status.
+        val members = team.listMembers()
+        assertTrue(members.any { it.email == "newmember@prov.test" })
+        val newMemberId = requireNotNull(users.findByEmail("newmember@prov.test")?.id)
+        assertEquals("SUSPENDED", team.changeMemberStatus(newMemberId, AccountStatus.SUSPENDED).status)
+
+        // But not a member of a direction they do not manage.
+        val dcmMember = persist("dcmmember@prov.test") { it.assign(Department.DCM, DepartmentRole.MEMBER) }
+        assertFailsWith<ResponseStatusException> {
+            team.changeMemberStatus(requireNotNull(dcmMember.id), AccountStatus.SUSPENDED)
+        }
 
         val member = persist("plainmember@prov.test") { it.assign(Department.DRI, DepartmentRole.MEMBER) }
         authenticateAs(member)

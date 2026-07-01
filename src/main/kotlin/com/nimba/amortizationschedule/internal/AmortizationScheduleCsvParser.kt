@@ -56,10 +56,16 @@ class AmortizationScheduleCsvParser {
         val lines = mutableListOf<ParsedScheduleLine>()
         val errors = mutableListOf<ScheduleError>()
         try {
+            // Accept whichever delimiter Excel produced: French/European locales export
+            // CSV with ';', US locales with ','. Sniff the header line, then rewind.
+            reader.mark(1 shl 16)
+            val headerLine = reader.readLine() ?: ""
+            reader.reset()
+            val delimiter = if (headerLine.count { it == ',' } > headerLine.count { it == ';' }) ',' else ';'
             val format =
                 CSVFormat.DEFAULT
                     .builder()
-                    .setDelimiter(';')
+                    .setDelimiter(delimiter)
                     .setHeader()
                     .setSkipHeaderRecord(true)
                     .setIgnoreSurroundingSpaces(true)

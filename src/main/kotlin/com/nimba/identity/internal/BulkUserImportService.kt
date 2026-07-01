@@ -46,9 +46,15 @@ class BulkUserImportService(
     /** Header-validated raw rows (typed department/role); throws 400 on a bad file. */
     private fun parse(bytes: ByteArray): List<RawRow> {
         val reader = BufferedReader(InputStreamReader(ByteArrayInputStream(bytes), StandardCharsets.UTF_8))
+        // Accept either delimiter (Excel exports ',' or ';' depending on locale).
+        reader.mark(1 shl 16)
+        val headerLine = reader.readLine() ?: ""
+        reader.reset()
+        val delimiter = if (headerLine.count { it == ';' } > headerLine.count { it == ',' }) ';' else ','
         val format =
             CSVFormat.DEFAULT
                 .builder()
+                .setDelimiter(delimiter)
                 .setHeader()
                 .setSkipHeaderRecord(true)
                 .setIgnoreSurroundingSpaces(true)
