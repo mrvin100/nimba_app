@@ -2,6 +2,7 @@ package com.nimba.creditcase.internal
 
 import com.nimba.creditcase.CreateCreditCaseCommand
 import com.nimba.creditcase.CreditCaseModuleApi
+import com.nimba.creditcase.UpdateCreditCaseCommand
 import com.nimba.shared.CurrentUser
 import jakarta.validation.Valid
 import org.springframework.data.domain.Pageable
@@ -11,6 +12,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.ResponseStatus
@@ -37,6 +39,21 @@ class CreditCaseController(
                     productType = request.productType,
                     currency = request.currency,
                     createdBy = currentUser.id(),
+                ),
+            ).toResponse()
+
+    @PutMapping("/{id}")
+    fun update(
+        @PathVariable id: UUID,
+        @Valid @RequestBody request: UpdateCreditCaseRequest,
+    ): CreditCaseResponse =
+        creditCases
+            .updateCase(
+                id,
+                UpdateCreditCaseCommand(
+                    clientName = request.clientName,
+                    productType = request.productType,
+                    currency = request.currency,
                 ),
             ).toResponse()
 

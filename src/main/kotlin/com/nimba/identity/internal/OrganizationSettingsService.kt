@@ -7,7 +7,9 @@ import java.time.Instant
 
 /**
  * Reads and updates the single organisation-settings row (NIMBA-35). The sender
- * identity here is what invitation e-mails are sent from.
+ * identity here is what invitation e-mails are sent from. The logo image itself is
+ * handled by [OrganizationLogoService] (object-storage I/O); this service owns the
+ * settings row (name, sender, and the logo key/content-type persisted on it).
  */
 @Service
 class OrganizationSettingsService(

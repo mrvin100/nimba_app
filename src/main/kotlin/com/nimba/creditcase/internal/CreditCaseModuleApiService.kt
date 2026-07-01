@@ -4,6 +4,7 @@ import com.nimba.creditcase.CreateCreditCaseCommand
 import com.nimba.creditcase.CreditCaseInfo
 import com.nimba.creditcase.CreditCaseModuleApi
 import com.nimba.creditcase.CreditCaseStatus
+import com.nimba.creditcase.UpdateCreditCaseCommand
 import com.nimba.identity.IdentityModuleApi
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
@@ -36,6 +37,22 @@ class CreditCaseModuleApiService(
                 ),
             )
         return saved.toCreditCaseInfo()
+    }
+
+    @Transactional
+    override fun updateCase(
+        id: UUID,
+        command: UpdateCreditCaseCommand,
+    ): CreditCaseInfo {
+        val case =
+            creditCases
+                .findById(id)
+                .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Dossier introuvable") }
+        case.clientName = command.clientName
+        case.productType = command.productType
+        case.currency = command.currency
+        case.updatedAt = Instant.now()
+        return case.toCreditCaseInfo()
     }
 
     @Transactional(readOnly = true)

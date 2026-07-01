@@ -100,6 +100,7 @@ class SecurityConfig(
                 // Organisation display name is public so the login screen and chrome
                 // reflect the configured organisation before authentication.
                 it.requestMatchers(HttpMethod.GET, "$base/auth/organization").permitAll()
+                it.requestMatchers(HttpMethod.GET, "$base/auth/organization/logo").permitAll()
                 it.requestMatchers("/actuator/health/**").permitAll()
                 // Interactive API docs (springdoc). Exposed for developer use; a
                 // production deployment can disable springdoc via configuration.

@@ -27,6 +27,14 @@ class OrganizationSettings {
     @Column(name = "sender_email", nullable = false)
     var senderEmail: String = "no-reply@nimba.local"
 
+    /** Object-storage key of the organisation logo, or null when none is configured. */
+    @Column(name = "logo_key")
+    var logoKey: String? = null
+
+    /** Content type of the stored logo (e.g. `image/png`), used when serving it. */
+    @Column(name = "logo_content_type")
+    var logoContentType: String? = null
+
     @Column(name = "updated_at", nullable = false)
     var updatedAt: Instant = Instant.now()
 

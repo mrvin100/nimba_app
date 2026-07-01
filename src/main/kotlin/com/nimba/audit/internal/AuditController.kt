@@ -1,11 +1,16 @@
 package com.nimba.audit.internal
 
 import org.springframework.data.domain.Pageable
+import org.springframework.data.domain.Sort
 import org.springframework.data.web.PageableDefault
+import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 import java.util.UUID
 
 data class AuditEventResponse(
@@ -40,9 +45,17 @@ class AuditController(
 ) {
     @GetMapping
     fun list(
-        @PageableDefault(size = 30) pageable: Pageable,
+        @PageableDefault(size = 30, sort = ["occurredAt"], direction = Sort.Direction.DESC) pageable: Pageable,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) from: LocalDate?,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) to: LocalDate?,
+        @RequestParam(required = false) method: String?,
+        @RequestParam(required = false) status: Int?,
     ): AuditPage {
-        val page = events.findAllByOrderByOccurredAtDesc(pageable)
+        // Date filters are calendar days (UTC): [from 00:00, to+1 00:00) so `to` is inclusive.
+        val fromInstant = from?.atStartOfDay(ZoneOffset.UTC)?.toInstant()
+        val toInstant = to?.plusDays(1)?.atStartOfDay(ZoneOffset.UTC)?.toInstant()
+        val filter = auditFilter(fromInstant, toInstant, method?.takeIf { it.isNotBlank() }?.uppercase(), status)
+        val page = events.findAll(filter, pageable)
         return AuditPage(
             content = page.content.map { it.toResponse() },
             page = page.number,

@@ -1,14 +1,20 @@
 package com.nimba.amortizationschedule.internal
 
 import com.nimba.creditcase.CreditCaseModuleApi
+import com.nimba.identity.IdentityModuleApi
+import com.nimba.identity.OrganizationLogo
+import org.apache.poi.util.Units
 import org.apache.poi.xwpf.usermodel.BreakType
+import org.apache.poi.xwpf.usermodel.Document
 import org.apache.poi.xwpf.usermodel.ParagraphAlignment
 import org.apache.poi.xwpf.usermodel.XWPFDocument
 import org.apache.poi.xwpf.usermodel.XWPFParagraph
+import org.apache.poi.xwpf.usermodel.XWPFRun
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.math.BigDecimal
 import java.text.DecimalFormat
@@ -17,20 +23,24 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
+import javax.imageio.ImageIO
 
 /**
  * Builds the Word (.docx) document of a case's active trades — the lettres de change
  * (traités), one traité per échéance in two copies (bank + client), matching the
  * bank's traité layout (NIMBA-27). Each traité is rendered strictly from the
  * generated [Trade] (due date, amount in figures and in words, currency) and the
- * case (the tiré / lessee), plus the bank-side constants ([TraiteProperties]), so the
- * document is coherent with the imported schedule end to end.
+ * case (the tiré / lessee), plus the bank-side constants ([TraiteProperties]) and the
+ * organisation logo (from the identity module), so the document is coherent with the
+ * imported schedule end to end and visually matches the reference model: Candara 14pt,
+ * the logo at the head of each copy, labels in normal weight with their values in bold.
  */
 @Service
 class TradeDocxExportService(
     private val trades: TradeRepository,
     private val schedules: AmortizationScheduleRepository,
     private val creditCases: CreditCaseModuleApi,
+    private val identity: IdentityModuleApi,
     private val traite: TraiteProperties,
 ) {
     private val dueDateFormat = DateTimeFormatter.ofPattern("dd-MM-uuuu")
@@ -61,12 +71,13 @@ class TradeDocxExportService(
         }
         val version = schedules.findById(active.first().scheduleId).orElse(null)?.versionNumber ?: 0
         val issueDate = active.first().dueDate
+        val logo = identity.organizationLogo()
 
         val document = XWPFDocument()
         active.forEachIndexed { index, trade ->
-            renderTraite(document, trade, case.clientName, case.currency, issueDate)
+            renderTraite(document, trade, case.clientName, case.currency, issueDate, logo)
             spacer(document)
-            renderTraite(document, trade, case.clientName, case.currency, issueDate)
+            renderTraite(document, trade, case.clientName, case.currency, issueDate, logo)
             if (index < active.size - 1) pageBreak(document)
         }
 
@@ -85,40 +96,73 @@ class TradeDocxExportService(
         lessee: String,
         currency: String,
         issueDate: LocalDate,
+        logo: OrganizationLogo?,
     ) {
-        labelLine(document, "Tireur", traite.tireur)
-        labelLine(document, "Genre d'activité", traite.genreActivite)
+        logo?.let { renderLogo(document, it) }
+
+        labelLine(document, "Tireur", traite.tireur, valueBold = true)
+        labelLine(document, "Genre d'activité", traite.genreActivite, valueBold = true)
         blank(document)
-        text(
-            document,
-            "Veuillez payer contre cette Lettre de Change au ${trade.dueDate.format(dueDateFormat)} " +
-                "à l'ordre de ${traite.orderBeneficiary}",
-        )
-        text(document, "La somme de")
-        text(document, currency, bold = true)
-        text(document, grouped(trade.amount), bold = true)
-        text(document, " = ${trade.amountInWords} Francs Guinéens")
-        blank(document)
+
+        val order = document.createParagraph().also { it.alignment = ParagraphAlignment.BOTH }
+        run(order, "Veuillez payer contre cette ")
+        run(order, "Lettre de Change", bold = true)
+        run(order, " au ")
+        run(order, trade.dueDate.format(dueDateFormat), bold = true)
+        run(order, " à l'ordre d'")
+        run(order, traite.orderBeneficiary, bold = true)
+
+        val amount = document.createParagraph().also { it.alignment = ParagraphAlignment.BOTH }
+        run(amount, "La somme de ")
+        run(amount, "$currency ${grouped(trade.amount)} = ${trade.amountInWords} Francs Guinéens", bold = true)
+
         text(document, "équivalant à la valeur représentative du crédit leasing à vous octroyer par la banque.")
-        labelLine(document, "Tiré", lessee)
-        labelLine(document, "Domiciliation", traite.domiciliation)
-        labelLine(document, "N° de compte", traite.accountNumber)
-        labelLine(document, "Devise", currency)
+        blank(document)
+
+        labelLine(document, "Tiré", lessee, valueBold = false)
+        labelLine(document, "Domiciliation", traite.domiciliation, valueBold = true)
+        labelLine(document, "N° de compte", traite.accountNumber, valueBold = false, valueFont = ACCOUNT_FONT)
+        labelLine(document, "Devise", currency, valueBold = true)
+        blank(document)
+
         val acceptance = document.createParagraph().also { it.alignment = ParagraphAlignment.BOTH }
-        acceptance.createRun().setText("POUR ACCEPTATION :\t\t\t${traite.place}, le ${longDate(issueDate)}")
+        run(acceptance, "POUR ACCEPTATION :\t\t\t${traite.place}, le ${longDate(issueDate)}", bold = true)
+    }
+
+    /** Places the organisation logo at the head of a traité, preserving its aspect ratio. */
+    private fun renderLogo(
+        document: XWPFDocument,
+        logo: OrganizationLogo,
+    ) {
+        try {
+            val image = ImageIO.read(ByteArrayInputStream(logo.bytes)) ?: return
+            val width = LOGO_WIDTH_PX
+            val height = (LOGO_WIDTH_PX.toDouble() * image.height / image.width).toInt().coerceAtLeast(1)
+            val paragraph = document.createParagraph()
+            ByteArrayInputStream(logo.bytes).use { stream ->
+                paragraph.createRun().addPicture(
+                    stream,
+                    pictureType(logo.contentType),
+                    "organization-logo",
+                    Units.pixelToEMU(width),
+                    Units.pixelToEMU(height),
+                )
+            }
+        } catch (_: Exception) {
+            // A logo that cannot be decoded/embedded must not break the traité export.
+        }
     }
 
     private fun labelLine(
         document: XWPFDocument,
         label: String,
         value: String,
+        valueBold: Boolean,
+        valueFont: String = DEFAULT_FONT,
     ) {
         val paragraph = document.createParagraph()
-        paragraph.createRun().apply {
-            isBold = true
-            setText("$label\t: ")
-        }
-        paragraph.createRun().setText(value)
+        run(paragraph, "$label: ")
+        run(paragraph, value, bold = valueBold, font = valueFont)
     }
 
     private fun text(
@@ -126,12 +170,22 @@ class TradeDocxExportService(
         value: String,
         bold: Boolean = false,
     ) {
-        val paragraph = document.createParagraph()
+        run(document.createParagraph(), value, bold = bold)
+    }
+
+    /** Adds a styled run in the traité's typography (Candara 14pt by default). */
+    private fun run(
+        paragraph: XWPFParagraph,
+        value: String,
+        bold: Boolean = false,
+        font: String = DEFAULT_FONT,
+    ): XWPFRun =
         paragraph.createRun().apply {
+            fontFamily = font
+            fontSize = FONT_SIZE_PT
             isBold = bold
             setText(value)
         }
-    }
 
     private fun blank(document: XWPFDocument) {
         document.createParagraph()
@@ -147,10 +201,25 @@ class TradeDocxExportService(
         document.createParagraph().createRun().addBreak(BreakType.PAGE)
     }
 
+    private fun pictureType(contentType: String): Int =
+        when (contentType.lowercase()) {
+            "image/jpeg", "image/jpg" -> Document.PICTURE_TYPE_JPEG
+            "image/gif" -> Document.PICTURE_TYPE_GIF
+            "image/bmp" -> Document.PICTURE_TYPE_BMP
+            else -> Document.PICTURE_TYPE_PNG
+        }
+
     private fun grouped(amount: BigDecimal): String {
         val symbols = DecimalFormatSymbols(Locale.FRENCH).apply { groupingSeparator = ' ' }
         return DecimalFormat("#,##0", symbols).format(amount.toBigInteger())
     }
 
     private fun longDate(date: LocalDate): String = "%02d %s %d".format(date.dayOfMonth, monthNames[date.monthValue - 1], date.year)
+
+    private companion object {
+        const val DEFAULT_FONT = "Candara"
+        const val ACCOUNT_FONT = "Tahoma"
+        const val FONT_SIZE_PT = 14
+        const val LOGO_WIDTH_PX = 200
+    }
 }
