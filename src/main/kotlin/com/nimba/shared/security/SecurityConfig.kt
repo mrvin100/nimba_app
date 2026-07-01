@@ -4,6 +4,7 @@ import com.nimba.shared.ApiProperties
 import jakarta.servlet.DispatcherType
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
 import org.springframework.security.access.hierarchicalroles.RoleHierarchy
 import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl
@@ -96,6 +97,9 @@ class SecurityConfig(
                 it.requestMatchers("$base/auth/bootstrap").permitAll()
                 it.requestMatchers("$base/auth/invitations/**").permitAll()
                 it.requestMatchers("$base/auth/set-password").permitAll()
+                // Organisation display name is public so the login screen and chrome
+                // reflect the configured organisation before authentication.
+                it.requestMatchers(HttpMethod.GET, "$base/auth/organization").permitAll()
                 it.requestMatchers("/actuator/health/**").permitAll()
                 // Interactive API docs (springdoc). Exposed for developer use; a
                 // production deployment can disable springdoc via configuration.

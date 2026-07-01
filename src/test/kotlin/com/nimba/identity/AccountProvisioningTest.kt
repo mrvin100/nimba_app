@@ -13,7 +13,10 @@ import com.nimba.identity.internal.InvitationService
 import com.nimba.identity.internal.InviteMemberRequest
 import com.nimba.identity.internal.MembershipPayload
 import com.nimba.identity.internal.OrganizationSettingsService
+import com.nimba.identity.internal.ProfileService
+import com.nimba.identity.internal.PublicOrganizationController
 import com.nimba.identity.internal.SetPasswordRequest
+import com.nimba.identity.internal.UpdateProfileRequest
 import com.nimba.identity.internal.TeamService
 import com.nimba.identity.internal.UpdateOrganizationRequest
 import com.nimba.identity.internal.User
@@ -42,6 +45,8 @@ class AccountProvisioningTest(
     @Autowired private val team: TeamService,
     @Autowired private val organization: OrganizationSettingsService,
     @Autowired private val bulkImport: BulkUserImportService,
+    @Autowired private val profile: ProfileService,
+    @Autowired private val publicOrganization: PublicOrganizationController,
     @Autowired private val adminUsers: AdminUserService,
     @Autowired private val users: UserRepository,
     @Autowired private val passwordEncoder: PasswordEncoder,
@@ -138,6 +143,16 @@ class AccountProvisioningTest(
         assertFailsWith<ResponseStatusException> {
             adminUsers.changeStatus(requireNotNull(admin.id), AccountStatus.SUSPENDED)
         }
+    }
+
+    @Test
+    fun `a user updates their own display name and reads the public org name`() {
+        val user = persist("profile@prov.test") { it.assign(Department.DRI, DepartmentRole.MEMBER) }
+        authenticateAs(user)
+
+        val me = profile.updateName(UpdateProfileRequest("Nouveau Nom"))
+        assertEquals("Nouveau Nom", me.fullName)
+        assertEquals(organization.get().organizationName, publicOrganization.get().organizationName)
     }
 
     @Test

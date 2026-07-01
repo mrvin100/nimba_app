@@ -77,3 +77,13 @@ internal fun AnalystUserDetails.toMeResponse(): MeResponse =
         admin = platformAdmin,
         memberships = memberships.map { MembershipDto(it.department.name, it.role.name) },
     )
+
+internal fun User.toMeResponse(): MeResponse =
+    MeResponse(
+        userId = requireNotNull(id).toString(),
+        fullName = fullName,
+        email = email,
+        status = status.name,
+        admin = platformAdmin,
+        memberships = memberships.map { MembershipDto(it.department.name, it.role.name) },
+    )
