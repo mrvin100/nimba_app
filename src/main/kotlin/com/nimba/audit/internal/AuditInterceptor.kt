@@ -71,6 +71,7 @@ class AuditInterceptor(
             path.contains("/amortization-schedule/trades") -> "Génération de trades"
             path.contains("/amortization-schedule") -> "Import d'un échéancier"
             method == "POST" && path.endsWith("/credit-cases") -> "Création d'un dossier"
+            method == "PUT" && path.contains("/credit-cases/") -> "Modification d'un dossier"
             else -> "$method $path"
         }
 

@@ -21,6 +21,17 @@ data class CreateCreditCaseRequest(
     val currency: String,
 )
 
+data class UpdateCreditCaseRequest(
+    @field:NotBlank
+    @field:Size(min = 1, max = 200, message = "Le nom du client doit faire entre 1 et 200 caractères")
+    val clientName: String,
+    @field:NotNull
+    val productType: ProductType,
+    @field:NotBlank
+    @field:Pattern(regexp = "[A-Z]{3}", message = "La devise doit être un code à 3 lettres majuscules (ex. GNF)")
+    val currency: String,
+)
+
 data class CreditCaseResponse(
     val id: UUID,
     val caseNumber: String,
