@@ -31,6 +31,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-mail")
     // Object storage (MinIO/S3) for user avatars.
     implementation("io.minio:minio:8.5.14")
+    // Word (.docx) generation for the trades / lettres de change document.
+    implementation("org.apache.poi:poi-ooxml:5.3.0")
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")

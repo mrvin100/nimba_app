@@ -23,6 +23,7 @@ class TradeGenerationController(
     private val tradeGeneration: TradeGenerationService,
     private val tradeQuery: TradeQueryService,
     private val tradeExport: TradeExportService,
+    private val tradeDocxExport: TradeDocxExportService,
 ) {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -44,6 +45,18 @@ class TradeGenerationController(
             .ok()
             .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"${export.filename}\"")
             .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
+            .body(export.content)
+    }
+
+    @GetMapping("/export/docx")
+    fun exportDocx(
+        @PathVariable caseId: UUID,
+    ): ResponseEntity<ByteArray> {
+        val export = tradeDocxExport.export(caseId)
+        return ResponseEntity
+            .ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"${export.filename}\"")
+            .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
             .body(export.content)
     }
 }

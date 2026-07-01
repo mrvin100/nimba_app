@@ -111,6 +111,28 @@ class TradeExportEndpointTest(
     }
 
     @Test
+    fun `exports the active trades as a downloadable Word document`() {
+        val client = authenticatedClient()
+        val created = creditCases.createCase(CreateCreditCaseCommand("ETS OC ET FRERES", ProductType.LEASING, "GNF", analystId()))
+        uploadValidAndGenerate(client, created.id)
+
+        val response =
+            client.send(
+                HttpRequest.newBuilder(URI("${base(created.id)}/trades/export/docx")).GET().build(),
+                HttpResponse.BodyHandlers.ofByteArray(),
+            )
+
+        assertEquals(200, response.statusCode())
+        assertContains(response.headers().firstValue("Content-Disposition").orElse(""), ".docx")
+        assertContains(response.headers().firstValue("Content-Type").orElse(""), "wordprocessingml")
+        val body = response.body()
+        assertTrue(body.size > 1000, "the .docx should contain the traités")
+        // A .docx is a ZIP archive: it begins with the "PK" signature.
+        assertEquals('P'.code.toByte(), body[0])
+        assertEquals('K'.code.toByte(), body[1])
+    }
+
+    @Test
     fun `returns 404 when there are no active trades to export`() {
         val client = authenticatedClient()
         val caseId = creditCases.createCase(CreateCreditCaseCommand("Sans Trades", ProductType.LEASING, "GNF", analystId())).id

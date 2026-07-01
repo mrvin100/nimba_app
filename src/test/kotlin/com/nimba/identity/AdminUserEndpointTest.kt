@@ -132,6 +132,28 @@ class AdminUserEndpointTest(
     }
 
     @Test
+    fun `admin actions are recorded in the audit trail`() {
+        seed("audit-admin@nimba.test") { it.platformAdmin = true }
+        val admin = clientFor("audit-admin@nimba.test")
+
+        send(
+            admin,
+            req("/api/v1/admin/users")
+                .header("Content-Type", "application/json")
+                .POST(
+                    HttpRequest.BodyPublishers.ofString(
+                        """{"fullName":"Audité","email":"audited@nimba.test","admin":false,
+                           "memberships":[{"department":"DRI","role":"MEMBER"}]}""",
+                    ),
+                ).build(),
+        )
+
+        val audit = send(admin, req("/api/v1/admin/audit").GET().build())
+        assertEquals(200, audit.statusCode(), audit.body())
+        assertContains(audit.body(), "Création d'un utilisateur")
+    }
+
+    @Test
     fun `a non-admin is forbidden from the admin API`() {
         seed("member@nimba.test") { it.assign(Department.DRI, DepartmentRole.MEMBER) }
         val member = clientFor("member@nimba.test")
