@@ -80,6 +80,11 @@ class AmortizationScheduleCsvParser {
         try {
             val content = BufferedReader(InputStreamReader(input, decoder)).use { it.readText() }
             val delimiter = if (firstLine(content).count { it == ',' } > firstLine(content).count { it == ';' }) ',' else ';'
+            // When the field delimiter is a comma, any comma inside a (quoted) amount can
+            // only be a thousands separator — a file that used ',' as its decimal mark
+            // could not also use it to separate fields. This resolves the "305,257"
+            // (= 305257, not 305.257) ambiguity for Excel's "CSV UTF-8 (comma delimited)".
+            val commaIsDelimiter = delimiter == ','
             val format =
                 CSVFormat.DEFAULT
                     .builder()
@@ -119,7 +124,7 @@ class AmortizationScheduleCsvParser {
 
             val dateFormat = detectDateFormat(dataRecords, columns)
             for (record in dataRecords) {
-                parseRecord(record, columns, dateFormat, errors)?.let { lines.add(it) }
+                parseRecord(record, columns, dateFormat, commaIsDelimiter, errors)?.let { lines.add(it) }
             }
         } catch (ex: Exception) {
             return if (isEncodingProblem(ex)) {
@@ -186,6 +191,7 @@ class AmortizationScheduleCsvParser {
         record: CSVRecord,
         columns: Map<String, Int>,
         dateFormat: DateTimeFormatter,
+        commaIsDelimiter: Boolean,
         errors: MutableList<ScheduleError>,
     ): ParsedScheduleLine? {
         val lineNumber = record.recordNumber
@@ -207,8 +213,12 @@ class AmortizationScheduleCsvParser {
         }
 
         val dateEcheance = if (isVr) null else parseDate(record, columns, dateFormat, lineNumber, errors)
-        val amounts = REQUIRED_AMOUNT_COLUMNS.associateWith { parseAmount(record, columns, it, lineNumber, errors, required = true) }
-        val capitalRestantDu = parseAmount(record, columns, "capital_restant_du", lineNumber, errors, required = false)
+        val amounts =
+            REQUIRED_AMOUNT_COLUMNS.associateWith {
+                parseAmount(record, columns, it, commaIsDelimiter, lineNumber, errors, required = true)
+            }
+        val capitalRestantDu =
+            parseAmount(record, columns, "capital_restant_du", commaIsDelimiter, lineNumber, errors, required = false)
 
         if (errors.size > errorsBefore) return null
 
@@ -253,6 +263,7 @@ class AmortizationScheduleCsvParser {
         record: CSVRecord,
         columns: Map<String, Int>,
         column: String,
+        commaIsDelimiter: Boolean,
         lineNumber: Long,
         errors: MutableList<ScheduleError>,
         required: Boolean,
@@ -263,7 +274,7 @@ class AmortizationScheduleCsvParser {
             return null
         }
         return try {
-            BigDecimal(normalizeAmount(raw))
+            BigDecimal(normalizeAmount(raw, commaIsDelimiter))
         } catch (_: NumberFormatException) {
             errors.add(ScheduleError(lineNumber, column, "Valeur non numérique « $raw » dans la colonne « $column »."))
             null
@@ -271,12 +282,22 @@ class AmortizationScheduleCsvParser {
     }
 
     /**
-     * Normalises a money string to a plain decimal. Whitespace is dropped; grouped
-     * integers (several ',' or several '.') have their thousands separators removed;
-     * a single ',' is treated as a European decimal comma.
+     * Normalises a money string to a plain decimal. Whitespace is dropped. When the file
+     * is comma-delimited ([commaIsDelimiter]), every comma is unambiguously a thousands
+     * separator (so "305,257" is the integer 305257, not the decimal 305.257) and '.' is
+     * the decimal mark. Otherwise (semicolon-delimited) the decimal mark may be ',' or
+     * '.', so it is inferred per value: grouped integers (several ',' or several '.')
+     * have their separators removed, and a lone ',' is a European decimal comma — a lone
+     * '.' is kept as the decimal point.
      */
-    private fun normalizeAmount(raw: String): String {
+    private fun normalizeAmount(
+        raw: String,
+        commaIsDelimiter: Boolean,
+    ): String {
         val cleaned = raw.replace(Regex("""[\s ]"""), "")
+        if (commaIsDelimiter) {
+            return cleaned.replace(",", "")
+        }
         val commas = cleaned.count { it == ',' }
         val dots = cleaned.count { it == '.' }
         return when {
