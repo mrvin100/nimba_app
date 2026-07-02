@@ -5,8 +5,8 @@ import com.nimba.amortizationschedule.internal.AmortizationScheduleRepository
 import com.nimba.creditcase.CreateCreditCaseCommand
 import com.nimba.creditcase.CreditCaseModuleApi
 import com.nimba.creditcase.ProductType
-import com.nimba.identity.internal.User
 import com.nimba.identity.internal.UserRepository
+import com.nimba.seedDriAnalyst
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
@@ -37,14 +37,7 @@ class ScheduleUploadEndpointTest(
 ) {
     private val boundary = "----NimbaUploadBoundary"
 
-    private fun analystId(): UUID {
-        val existing = users.findByEmail("upload@banque.test")
-        return existing?.id ?: requireNotNull(
-            users
-                .saveAndFlush(User("Analyste Upload", "upload@banque.test", requireNotNull(passwordEncoder.encode("Pass-Word"))))
-                .id,
-        )
-    }
+    private fun analystId(): UUID = requireNotNull(seedDriAnalyst(users, passwordEncoder, "upload@banque.test").id)
 
     private fun authenticatedClient(): HttpClient {
         analystId()

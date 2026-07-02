@@ -1,11 +1,11 @@
 package com.nimba.identity.internal
 
+import com.nimba.shared.CurrentUser
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.http.HttpStatus
 import org.springframework.security.authentication.AuthenticationManager
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
-import org.springframework.security.core.Authentication
 import org.springframework.security.core.AuthenticationException
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.web.context.SecurityContextRepository
@@ -25,6 +25,7 @@ class AuthService(
     private val securityContextRepository: SecurityContextRepository,
     private val loginRateLimiter: LoginRateLimiter,
     private val users: UserRepository,
+    private val currentUser: CurrentUser,
 ) {
     fun login(
         request: LoginRequest,
@@ -66,15 +67,9 @@ class AuthService(
         SecurityContextHolder.clearContext()
     }
 
-    fun me(authentication: Authentication): MeResponse {
-        // Load fresh so the response reflects live changes (name, avatar) made this
-        // session, not just what was captured in the principal at login.
-        val principal = authentication.principal as AnalystUserDetails
-        return users
-            .findById(principal.userId)
-            .orElseThrow { ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentification requise") }
-            .toMeResponse()
-    }
+    // Load fresh so the response reflects live changes (name, avatar) made this
+    // session, not just what was captured in the principal at login.
+    fun me(): MeResponse = users.caller(currentUser).toMeResponse()
 }
 
 internal fun AnalystUserDetails.toMeResponse(): MeResponse =

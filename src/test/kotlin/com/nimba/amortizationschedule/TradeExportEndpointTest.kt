@@ -4,8 +4,8 @@ import com.nimba.TestcontainersConfiguration
 import com.nimba.creditcase.CreateCreditCaseCommand
 import com.nimba.creditcase.CreditCaseModuleApi
 import com.nimba.creditcase.ProductType
-import com.nimba.identity.internal.User
 import com.nimba.identity.internal.UserRepository
+import com.nimba.seedDriAnalyst
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
@@ -35,12 +35,7 @@ class TradeExportEndpointTest(
 ) {
     private val boundary = "----NimbaExportBoundary"
 
-    private fun analystId(): UUID {
-        val existing = users.findByEmail("export@banque.test")
-        return existing?.id ?: requireNotNull(
-            users.saveAndFlush(User("Analyste Export", "export@banque.test", requireNotNull(passwordEncoder.encode("Pass-Word")))).id,
-        )
-    }
+    private fun analystId(): UUID = requireNotNull(seedDriAnalyst(users, passwordEncoder, "export@banque.test").id)
 
     private fun authenticatedClient(): HttpClient {
         analystId()

@@ -1,6 +1,8 @@
 package com.nimba.identity.internal
 
 import com.nimba.identity.AccountStatus
+import com.nimba.shared.PageResponse
+import com.nimba.shared.toPageResponse
 import jakarta.validation.Valid
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
@@ -29,18 +31,7 @@ class AdminUserController(
     @GetMapping
     fun list(
         @PageableDefault(size = 20, sort = ["createdAt"], direction = Sort.Direction.DESC) pageable: Pageable,
-    ): AdminUserPage {
-        val page = adminUsers.list(pageable)
-        return AdminUserPage(
-            content = page.content,
-            page = page.number,
-            size = page.size,
-            totalElements = page.totalElements,
-            totalPages = page.totalPages,
-            hasNext = page.hasNext(),
-            hasPrevious = page.hasPrevious(),
-        )
-    }
+    ): PageResponse<AdminUserResponse> = adminUsers.list(pageable).toPageResponse()
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -69,14 +60,3 @@ class AdminUserController(
         @Valid @RequestBody request: UpdateMembershipsRequest,
     ): AdminUserResponse = adminUsers.updateMemberships(id, request)
 }
-
-/** Pagination envelope for the admin user list. */
-data class AdminUserPage(
-    val content: List<AdminUserResponse>,
-    val page: Int,
-    val size: Int,
-    val totalElements: Long,
-    val totalPages: Int,
-    val hasNext: Boolean,
-    val hasPrevious: Boolean,
-)

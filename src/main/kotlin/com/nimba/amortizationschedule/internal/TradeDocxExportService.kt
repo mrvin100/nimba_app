@@ -1,6 +1,7 @@
 package com.nimba.amortizationschedule.internal
 
 import com.nimba.creditcase.CreditCaseModuleApi
+import com.nimba.creditcase.getOrThrow
 import com.nimba.identity.IdentityModuleApi
 import com.nimba.identity.OrganizationLogo
 import org.apache.poi.util.Units
@@ -63,8 +64,7 @@ class TradeDocxExportService(
     @Transactional(readOnly = true)
     fun export(creditCaseId: UUID): TradeExport {
         val case =
-            creditCases.findById(creditCaseId)
-                ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Dossier introuvable")
+            creditCases.getOrThrow(creditCaseId)
         val active = trades.findByCreditCaseIdAndActiveIsTrueOrderByDueDateAsc(creditCaseId)
         if (active.isEmpty()) {
             throw ResponseStatusException(HttpStatus.NOT_FOUND, "Aucun trade actif à exporter pour ce dossier.")

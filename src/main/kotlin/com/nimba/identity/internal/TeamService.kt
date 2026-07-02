@@ -4,6 +4,7 @@ import com.nimba.identity.AccountStatus
 import com.nimba.identity.Department
 import com.nimba.identity.DepartmentRole
 import com.nimba.shared.CurrentUser
+import com.nimba.shared.getOrThrow
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
@@ -24,10 +25,7 @@ class TeamService(
 ) {
     @Transactional
     fun inviteMember(request: InviteMemberRequest): AdminUserResponse {
-        val caller =
-            users.findById(currentUser.id()).orElseThrow {
-                ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentification requise")
-            }
+        val caller = caller()
         if (!caller.canInviteInto(request.department)) {
             throw ResponseStatusException(HttpStatus.FORBIDDEN, "Seul un manager de cette direction peut inviter un membre")
         }
@@ -64,7 +62,7 @@ class TeamService(
     ): AdminUserResponse {
         val caller = caller()
         val managed = caller.managedDepartments()
-        val target = users.findById(id).orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Utilisateur introuvable") }
+        val target = users.getOrThrow(id, "Utilisateur introuvable")
         if (!target.isManageableMemberFor(managed, caller)) {
             throw ResponseStatusException(HttpStatus.FORBIDDEN, "Vous ne pouvez gérer que les membres de vos directions")
         }
@@ -72,10 +70,7 @@ class TeamService(
         return target.toAdminResponse()
     }
 
-    private fun caller(): User =
-        users.findById(currentUser.id()).orElseThrow {
-            ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentification requise")
-        }
+    private fun caller(): User = users.caller(currentUser)
 
     private fun User.managedDepartments(): Set<Department> =
         if (platformAdmin) {

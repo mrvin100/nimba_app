@@ -1,8 +1,8 @@
 package com.nimba.creditcase
 
 import com.nimba.TestcontainersConfiguration
-import com.nimba.identity.internal.User
 import com.nimba.identity.internal.UserRepository
+import com.nimba.seedDriAnalyst
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
@@ -29,7 +29,7 @@ class GetCreditCaseEndpointTest(
     private fun analystId(): UUID {
         val existing = users.findByEmail("getcase@banque.test")
         return existing?.id ?: requireNotNull(
-            users.saveAndFlush(User("Analyste Get", "getcase@banque.test", requireNotNull(passwordEncoder.encode("Pass-Word")))).id,
+            seedDriAnalyst(users, passwordEncoder, "getcase@banque.test").id,
         )
     }
 

@@ -1,8 +1,8 @@
 package com.nimba.creditcase
 
 import com.nimba.TestcontainersConfiguration
-import com.nimba.identity.internal.User
 import com.nimba.identity.internal.UserRepository
+import com.nimba.seedDriAnalyst
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
@@ -26,15 +26,7 @@ class CreditCaseListEndpointTest(
     @Value("\${local.server.port}") private val port: Int,
 ) {
     private fun authenticatedClient(): HttpClient {
-        if (users.findByEmail("lister@banque.test") == null) {
-            users.saveAndFlush(
-                User(
-                    fullName = "Analyste Lister",
-                    email = "lister@banque.test",
-                    passwordHash = requireNotNull(passwordEncoder.encode("Pass-Word")),
-                ),
-            )
-        }
+        seedDriAnalyst(users, passwordEncoder, "lister@banque.test")
         val client = HttpClient.newBuilder().cookieHandler(CookieManager()).build()
         val login =
             client.send(

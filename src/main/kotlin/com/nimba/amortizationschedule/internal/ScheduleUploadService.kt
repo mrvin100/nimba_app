@@ -1,11 +1,10 @@
 package com.nimba.amortizationschedule.internal
 
 import com.nimba.creditcase.CreditCaseModuleApi
+import com.nimba.creditcase.getOrThrow
 import com.nimba.shared.CurrentUser
-import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import org.springframework.web.server.ResponseStatusException
 import java.io.ByteArrayInputStream
 import java.util.UUID
 
@@ -34,8 +33,7 @@ class ScheduleUploadService(
         vrOffsetMonths: Int,
         fixedDayOfMonth: Int,
     ): AmortizationSchedule {
-        creditCases.findById(creditCaseId)
-            ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Dossier introuvable")
+        creditCases.getOrThrow(creditCaseId)
 
         val result = validation.validate(ByteArrayInputStream(bytes))
         if (!result.valid) {
