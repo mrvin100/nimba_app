@@ -111,7 +111,10 @@ class TradeExportEndpointTest(
     @Test
     fun `exports the active trades as a downloadable Word document`() {
         val client = authenticatedClient()
-        val created = creditCases.createCase(CreateCreditCaseCommand("ETS OC ET FRERES", ProductType.LEASING, "GNF", analystId()))
+        val created =
+            creditCases.createCase(
+                CreateCreditCaseCommand("ETS OC ET FRERES", ProductType.LEASING, "GNF", analystId(), "0102386501-90"),
+            )
         uploadValidAndGenerate(client, created.id)
 
         val response =
@@ -136,6 +139,8 @@ class TradeExportEndpointTest(
         assertEquals(25, Regex("POUR ACCEPTATION").findAll(text).count())
         assertContains(text, "ETS OC ET FRERES")
         assertContains(text, "Lettre de Change")
+        // The client's account number captured on the case is what the traité prints.
+        assertContains(text, "0102386501-90")
         // The amount in words already ends with the currency wording: it must
         // appear exactly once per traité, never doubled.
         assertContains(text, "Francs Guinéens")

@@ -34,6 +34,9 @@ class CreditCase(
     var currency: String,
     @Column(name = "created_by", nullable = false, updatable = false)
     val createdBy: UUID,
+    /** The client's account number at the bank (printed on the traités). */
+    @Column(name = "account_number")
+    var accountNumber: String? = null,
 ) {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

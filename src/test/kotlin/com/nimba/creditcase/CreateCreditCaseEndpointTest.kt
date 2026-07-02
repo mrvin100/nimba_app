@@ -54,13 +54,17 @@ class CreateCreditCaseEndpointTest(
         val response =
             client.send(
                 request("/api/v1/credit-cases")
-                    .POST(json("""{"clientName":"ETS OC ET FRERES","productType":"LEASING","currency":"GNF"}"""))
-                    .build(),
+                    .POST(
+                        json(
+                            """{"clientName":"ETS OC ET FRERES","productType":"LEASING","currency":"GNF","accountNumber":"0102386501-90"}""",
+                        ),
+                    ).build(),
                 HttpResponse.BodyHandlers.ofString(),
             )
 
         assertEquals(201, response.statusCode(), "body=${response.body()}")
         assertContains(response.body(), "ETS OC ET FRERES")
+        assertContains(response.body(), "0102386501-90")
         assertTrue(Regex("""DOS-\d{4}-\d{4}""").containsMatchIn(response.body()), "expected a case number; body=${response.body()}")
     }
 

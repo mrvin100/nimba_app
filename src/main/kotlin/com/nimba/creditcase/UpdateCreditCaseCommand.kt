@@ -8,4 +8,6 @@ data class UpdateCreditCaseCommand(
     val clientName: String,
     val productType: ProductType,
     val currency: String,
+    /** The client's account number at the bank (printed on the traités). */
+    val accountNumber: String? = null,
 )

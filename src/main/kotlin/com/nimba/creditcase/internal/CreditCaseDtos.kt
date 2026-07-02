@@ -25,6 +25,8 @@ data class CreditCaseWriteRequest(
     @field:NotBlank
     @field:Pattern(regexp = "[A-Z]{3}", message = "La devise doit être un code à 3 lettres majuscules (ex. GNF)")
     val currency: String,
+    @field:Size(max = 50, message = "Le numéro de compte ne peut dépasser 50 caractères")
+    val accountNumber: String? = null,
 )
 
 data class CreditCaseResponse(
@@ -35,6 +37,7 @@ data class CreditCaseResponse(
     val currency: String,
     val status: CreditCaseStatus,
     val createdAt: Instant,
+    val accountNumber: String?,
 )
 
 internal fun CreditCaseInfo.toResponse(): CreditCaseResponse =
@@ -46,6 +49,7 @@ internal fun CreditCaseInfo.toResponse(): CreditCaseResponse =
         currency = currency,
         status = status,
         createdAt = createdAt,
+        accountNumber = accountNumber,
     )
 
 /** Row in the dashboard's credit-case list. */

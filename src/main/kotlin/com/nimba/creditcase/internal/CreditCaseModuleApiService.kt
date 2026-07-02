@@ -37,6 +37,7 @@ class CreditCaseModuleApiService(
                     productType = command.productType,
                     currency = command.currency,
                     createdBy = command.createdBy,
+                    accountNumber = command.accountNumber?.takeIf { it.isNotBlank() },
                 ),
             )
         return saved.toCreditCaseInfo()
@@ -51,6 +52,7 @@ class CreditCaseModuleApiService(
         case.clientName = command.clientName
         case.productType = command.productType
         case.currency = command.currency
+        case.accountNumber = command.accountNumber?.takeIf { it.isNotBlank() }
         case.updatedAt = Instant.now()
         return case.toCreditCaseInfo()
     }
@@ -82,4 +84,5 @@ internal fun CreditCase.toCreditCaseInfo(): CreditCaseInfo =
         status = status,
         createdBy = createdBy,
         createdAt = createdAt,
+        accountNumber = accountNumber,
     )

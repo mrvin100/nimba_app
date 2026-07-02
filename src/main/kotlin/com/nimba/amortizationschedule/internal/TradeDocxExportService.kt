@@ -81,10 +81,14 @@ class TradeDocxExportService(
         val organizationName = identity.organizationName()
         val logo = identity.organizationLogo()
 
+        // The traité prints the client's account when it is captured on the case;
+        // the configured bank-side default only covers legacy cases.
+        val accountNumber = case.accountNumber?.takeIf { it.isNotBlank() } ?: traite.accountNumber
+
         val document = XWPFDocument()
         configureA4(document)
         active.forEachIndexed { index, trade ->
-            renderTraite(document, trade, case.clientName, case.currency, issueDate, organizationName, logo)
+            renderTraite(document, trade, case.clientName, case.currency, accountNumber, issueDate, organizationName, logo)
             if (index < active.size - 1) {
                 // Word merges adjacent tables, so a separator paragraph is mandatory
                 // between two traités; it also carries the page break closing each
@@ -124,6 +128,7 @@ class TradeDocxExportService(
         trade: Trade,
         lessee: String,
         currency: String,
+        accountNumber: String,
         issueDate: LocalDate,
         organizationName: String,
         logo: OrganizationLogo?,
@@ -163,7 +168,7 @@ class TradeDocxExportService(
 
         labelLine(cell, "Tiré", lessee, valueBold = false)
         labelLine(cell, "Domiciliation", traite.domiciliation, valueBold = true)
-        labelLine(cell, "N° de compte", traite.accountNumber, valueBold = false, valueFont = ACCOUNT_FONT)
+        labelLine(cell, "N° de compte", accountNumber, valueBold = false, valueFont = ACCOUNT_FONT)
         labelLine(cell, "Devise", currency, valueBold = true)
         blank(cell)
 
