@@ -149,6 +149,25 @@ class AmortizationAnalyticsEndpointTest(
     }
 
     @Test
+    fun `table sorts on the requested column in both directions`() {
+        val client = authenticatedClient()
+        val caseId = creditCases.createCase(CreateCreditCaseCommand("Analytics Tri", ProductType.LEASING, "GNF", analystId())).id
+        upload(client, caseId)
+
+        val byCapitalDesc = json.readTree(get(client, "${base(caseId)}/table?sortBy=CAPITAL&sort=desc&size=100").body())
+        val capitals = byCapitalDesc["content"].toList().map { it["capital"].decimalValue() }
+        assertEquals(capitals.sortedDescending(), capitals, "capital must be non-increasing")
+
+        val byDateAsc = json.readTree(get(client, "${base(caseId)}/table?sortBy=DATE&size=100").body())
+        val dates = byDateAsc["content"].toList().map { it["date"].asText() }
+        assertEquals(dates.sorted(), dates, "dates must be non-decreasing")
+
+        // Default (PERIODE desc) is the schedule's own order reversed: VR first.
+        val reversed = json.readTree(get(client, "${base(caseId)}/table?sort=desc&size=100").body())
+        assertEquals("VR", reversed["content"].first()["period"].asText())
+    }
+
+    @Test
     fun `overview returns 404 when no schedule was imported`() {
         val client = authenticatedClient()
         val caseId = creditCases.createCase(CreateCreditCaseCommand("Sans Échéancier", ProductType.LEASING, "GNF", analystId())).id

@@ -1,12 +1,14 @@
 package com.nimba.creditcase.internal
 
 import com.nimba.creditcase.CreateCreditCaseCommand
+import com.nimba.creditcase.CreditCaseDeleted
 import com.nimba.creditcase.CreditCaseInfo
 import com.nimba.creditcase.CreditCaseModuleApi
 import com.nimba.creditcase.CreditCaseStatus
 import com.nimba.creditcase.UpdateCreditCaseCommand
 import com.nimba.identity.IdentityModuleApi
 import com.nimba.shared.getOrThrow
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.http.HttpStatus
@@ -21,6 +23,7 @@ class CreditCaseModuleApiService(
     private val creditCases: CreditCaseRepository,
     private val numberGenerator: CreditCaseNumberGenerator,
     private val identity: IdentityModuleApi,
+    private val events: ApplicationEventPublisher,
 ) : CreditCaseModuleApi {
     @Transactional
     override fun createCase(command: CreateCreditCaseCommand): CreditCaseInfo {
@@ -58,7 +61,15 @@ class CreditCaseModuleApiService(
     }
 
     @Transactional(readOnly = true)
-    override fun list(pageable: Pageable): Page<CreditCaseInfo> = creditCases.findAll(pageable).map { it.toCreditCaseInfo() }
+    override fun list(
+        pageable: Pageable,
+        archived: Boolean?,
+    ): Page<CreditCaseInfo> =
+        when (archived) {
+            null -> creditCases.findAll(pageable)
+            true -> creditCases.findByArchivedAtIsNotNull(pageable)
+            false -> creditCases.findByArchivedAtIsNull(pageable)
+        }.map { it.toCreditCaseInfo() }
 
     @Transactional(readOnly = true)
     override fun findById(id: UUID): CreditCaseInfo? = creditCases.findById(id).map { it.toCreditCaseInfo() }.orElse(null)
@@ -71,6 +82,36 @@ class CreditCaseModuleApiService(
         val case = creditCases.getOrThrow(creditCaseId, "Dossier introuvable")
         case.status = CreditCaseStatus.TRADES_GENERES
         case.updatedAt = Instant.now()
+    }
+
+    @Transactional
+    override fun archive(id: UUID): CreditCaseInfo {
+        val case = creditCases.getOrThrow(id, "Dossier introuvable")
+        // Idempotent: re-archiving keeps the original timestamp.
+        if (case.archivedAt == null) {
+            case.archivedAt = Instant.now()
+            case.updatedAt = Instant.now()
+        }
+        return case.toCreditCaseInfo()
+    }
+
+    @Transactional
+    override fun unarchive(id: UUID): CreditCaseInfo {
+        val case = creditCases.getOrThrow(id, "Dossier introuvable")
+        if (case.archivedAt != null) {
+            case.archivedAt = null
+            case.updatedAt = Instant.now()
+        }
+        return case.toCreditCaseInfo()
+    }
+
+    @Transactional
+    override fun delete(id: UUID) {
+        val case = creditCases.getOrThrow(id, "Dossier introuvable")
+        // Synchronous listeners purge dependent data (schedules, trades, retained
+        // files) inside this same transaction — all gone or nothing is.
+        events.publishEvent(CreditCaseDeleted(requireNotNull(case.id)))
+        creditCases.delete(case)
     }
 }
 
@@ -85,4 +126,5 @@ internal fun CreditCase.toCreditCaseInfo(): CreditCaseInfo =
         createdBy = createdBy,
         createdAt = createdAt,
         accountNumber = accountNumber,
+        archivedAt = archivedAt,
     )

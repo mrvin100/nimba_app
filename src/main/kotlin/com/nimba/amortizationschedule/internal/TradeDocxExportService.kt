@@ -25,6 +25,7 @@ import java.math.BigDecimal
 import java.math.BigInteger
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
+import java.time.Clock
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -50,6 +51,7 @@ class TradeDocxExportService(
     private val creditCases: CreditCaseModuleApi,
     private val identity: IdentityModuleApi,
     private val traite: TraiteProperties,
+    private val clock: Clock,
 ) {
     private val dueDateFormat = DateTimeFormatter.ofPattern("dd-MM-uuuu")
     private val monthNames =
@@ -76,7 +78,10 @@ class TradeDocxExportService(
             throw ResponseStatusException(HttpStatus.NOT_FOUND, "Aucun trade actif à exporter pour ce dossier.")
         }
         val version = schedules.findById(active.first().scheduleId).orElse(null)?.versionNumber ?: 0
-        val issueDate = active.first().dueDate
+        // The acceptance line is dated the day the document is produced — the
+        // parties sign it that day; the lettre de change's own maturity is the due
+        // date already printed in the payment order.
+        val issueDate = LocalDate.now(clock)
         val logo = identity.organizationLogo()
 
         // The traité prints the client's account when it is captured on the case;
@@ -339,24 +344,30 @@ class TradeDocxExportService(
         const val DEFAULT_FONT = "Candara"
         const val ACCOUNT_FONT = "Tahoma"
 
-        /** Compact type so three traités fit on one A4 page. */
-        const val FONT_SIZE_PT = 10
-        const val BLANK_FONT_SIZE_PT = 6
+        /**
+         * Vertical budget: the usable A4 height (16838 − 2×400 twips ≈ 800 pt)
+         * divided by three leaves ~265 pt per traité. The sizes below keep a full
+         * box (worst case: order and amount-in-words wrapping on two lines) around
+         * 245 pt, so three ALWAYS fit before each explicit page break — with any
+         * slack Word would push the third box and print 2 + 1 alternating pages.
+         */
+        const val FONT_SIZE_PT = 9
+        const val BLANK_FONT_SIZE_PT = 4
 
-        /** Two lines of this size ≈ 1 cm of signature room per traité. */
-        const val SIGNATURE_LINE_FONT_SIZE_PT = 12
-        const val LOGO_HEIGHT_PX = 34
+        /** Two lines of this size ≈ 0.9 cm of signature room per traité. */
+        const val SIGNATURE_LINE_FONT_SIZE_PT = 10
+        const val LOGO_HEIGHT_PX = 26
         const val TRAITES_PER_PAGE = 3
 
         /** A4 portrait geometry, in twips (1/20 pt). */
         const val A4_WIDTH_TWIPS = 11906L
         const val A4_HEIGHT_TWIPS = 16838L
-        const val MARGIN_VERTICAL_TWIPS = 567L
+        const val MARGIN_VERTICAL_TWIPS = 400L
         const val MARGIN_HORIZONTAL_TWIPS = 720L
         const val CONTENT_WIDTH_TWIPS = (A4_WIDTH_TWIPS - 2 * MARGIN_HORIZONTAL_TWIPS).toInt()
 
         /** Inner box geometry. */
-        const val CELL_MARGIN_V_TWIPS = 60
+        const val CELL_MARGIN_V_TWIPS = 40
         const val CELL_MARGIN_H_TWIPS = 170
         const val LABEL_TAB_TWIPS = 2000L
         const val ACCEPTANCE_INDENT_TWIPS = 720

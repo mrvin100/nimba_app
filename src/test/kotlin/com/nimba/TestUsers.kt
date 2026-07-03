@@ -27,3 +27,23 @@ fun seedDriAnalyst(
             passwordHash = requireNotNull(passwordEncoder.encode(TEST_PASSWORD)),
         ).apply { assign(Department.DRI, DepartmentRole.MEMBER) },
     )
+
+/**
+ * Seeds (idempotently) an active platform administrator — the profile the
+ * administrative dossier actions (archive / restore / delete) require. No
+ * direction membership: an admin manages the platform, not a direction's
+ * business, and the tests must prove ROLE_ADMIN alone opens those endpoints.
+ */
+fun seedPlatformAdmin(
+    users: UserRepository,
+    passwordEncoder: PasswordEncoder,
+    email: String,
+    fullName: String = "Admin $email",
+): User =
+    users.findByEmail(email) ?: users.saveAndFlush(
+        User(
+            fullName = fullName,
+            email = email,
+            passwordHash = requireNotNull(passwordEncoder.encode(TEST_PASSWORD)),
+        ).apply { platformAdmin = true },
+    )

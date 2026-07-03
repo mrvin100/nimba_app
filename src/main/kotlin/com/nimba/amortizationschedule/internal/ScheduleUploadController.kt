@@ -1,6 +1,7 @@
 package com.nimba.amortizationschedule.internal
 
 import org.springframework.http.HttpStatus
+import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestMapping
@@ -12,17 +13,24 @@ import org.springframework.web.server.ResponseStatusException
 import java.util.UUID
 
 /**
- * Definitive upload of an amortization schedule (NIMBA-20). Optional offset
- * parameters override the per-dossier defaults (ordinary 1 month, VR 2 months,
- * fixed day 5). Returns 201 with the created version, or 422 (via the upload
- * exception handler) if the file has any parse or consistency error — in which
- * case nothing is persisted.
+ * Definitive upload of an amortization schedule (NIMBA-20), and the case's current
+ * schedule state (GET) that the échéancier screen derives its workflow from.
+ * Optional offset parameters override the per-dossier defaults (ordinary 1 month,
+ * VR 2 months, fixed day 5). The upload returns 201 with the created version, or
+ * 422 (via the upload exception handler) if the file has any parse or consistency
+ * error — in which case nothing is persisted.
  */
 @RestController
 @RequestMapping("/credit-cases/{caseId}/amortization-schedule")
 class ScheduleUploadController(
     private val uploadService: ScheduleUploadService,
+    private val queryService: ScheduleQueryService,
 ) {
+    @GetMapping
+    fun latest(
+        @PathVariable caseId: UUID,
+    ): LatestScheduleResponse = queryService.latest(caseId)
+
     @PostMapping(consumes = ["multipart/form-data"])
     @ResponseStatus(HttpStatus.CREATED)
     fun upload(

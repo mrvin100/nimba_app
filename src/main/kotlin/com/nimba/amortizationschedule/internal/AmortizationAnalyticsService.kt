@@ -84,6 +84,7 @@ class AmortizationAnalyticsService(
         status: PaymentStatus?,
         page: Int,
         size: Int,
+        sortBy: TableSortField,
         descending: Boolean,
     ): PageResponse<AmortizationTableRow> {
         val lines = datedLines(creditCaseId)
@@ -101,7 +102,7 @@ class AmortizationAnalyticsService(
                         status = dated.status(today, lines),
                     )
                 }.filter { status == null || it.status == status }
-                .let { if (descending) it.reversed() else it }
+                .sortedFor(sortBy, descending)
 
         val fromIndex = (page * size).coerceAtMost(rows.size)
         val toIndex = (fromIndex + size).coerceAtMost(rows.size)
@@ -117,14 +118,47 @@ class AmortizationAnalyticsService(
         )
     }
 
+    /**
+     * Orders the rows for one sortable column. PERIODE keeps the schedule's own
+     * order (already the list order — "1".."24" then "VR", which a sort of the
+     * string could not reproduce), so descending is simply the reverse. Value
+     * columns compare with nulls last whichever the direction, so undated or
+     * unfilled rows never lead the table.
+     */
+    private fun List<AmortizationTableRow>.sortedFor(
+        sortBy: TableSortField,
+        descending: Boolean,
+    ): List<AmortizationTableRow> {
+        fun <R : Comparable<R>> byValue(selector: (AmortizationTableRow) -> R?): List<AmortizationTableRow> {
+            val order = if (descending) nullsLast(reverseOrder<R>()) else nullsLast(naturalOrder<R>())
+            return sortedWith(compareBy(order, selector))
+        }
+        return when (sortBy) {
+            TableSortField.PERIODE -> if (descending) reversed() else this
+            TableSortField.DATE -> byValue { it.date }
+            TableSortField.CAPITAL -> byValue { it.capital }
+            TableSortField.INTERET -> byValue { it.interet }
+            TableSortField.MENSUALITE -> byValue { it.mensualite }
+            TableSortField.CAPITAL_RESTANT -> byValue { it.capitalRestantDu }
+        }
+    }
+
     /** Latest schedule's lines with their effective dates, or 404 when nothing was imported. */
     private fun datedLines(creditCaseId: UUID): List<DatedLine> {
         creditCases.getOrThrow(creditCaseId)
         val schedule =
             schedules.findFirstByCreditCaseIdOrderByVersionNumberDesc(creditCaseId)
                 ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Aucun échéancier importé pour ce dossier.")
-        val lastOrdinaryDate = schedule.lines.lastOrNull { !it.isResidualValue }?.dateEcheance
-        return schedule.lines.map { line ->
+        // The JPA collection is ordered by its id — a RANDOM UUID, so it carries no
+        // business order. Everything here (chart sequencing, EN_COURS detection,
+        // the table's période order) needs the schedule order: échéance number
+        // ascending, the VR line last, as the fiche métier defines it.
+        val lines =
+            schedule.lines.sortedWith(
+                compareBy({ it.isResidualValue }, { it.numeroEcheance.toIntOrNull() ?: Int.MAX_VALUE }),
+            )
+        val lastOrdinaryDate = lines.lastOrNull { !it.isResidualValue }?.dateEcheance
+        return lines.map { line ->
             val date =
                 line.dateEcheance
                     ?: if (line.isResidualValue) lastOrdinaryDate?.plusMonths(schedule.vrOffsetMonths.toLong()) else null

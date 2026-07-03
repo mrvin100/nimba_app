@@ -57,6 +57,13 @@ data class AmortizationProgress(
 /** Payment state of one échéance relative to today. */
 enum class PaymentStatus { PAYE, EN_COURS, A_VENIR }
 
+/**
+ * Sortable columns of the detailed table. PERIODE is the schedule's own order
+ * (the CSV line order — "1".."24" then "VR", which no lexicographic sort of the
+ * string could reproduce); the others compare the row's values, nulls last.
+ */
+enum class TableSortField { PERIODE, DATE, CAPITAL, INTERET, MENSUALITE, CAPITAL_RESTANT }
+
 /** Row of the lazily-loaded detailed table. */
 data class AmortizationTableRow(
     /** Numero as uploaded ("1".."24" or "VR"). */

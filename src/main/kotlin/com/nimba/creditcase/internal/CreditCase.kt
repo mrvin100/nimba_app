@@ -51,4 +51,8 @@ class CreditCase(
 
     @Column(name = "updated_at", nullable = false)
     var updatedAt: Instant = Instant.now()
+
+    /** When an administrator archived the case; null while it is active. */
+    @Column(name = "archived_at")
+    var archivedAt: Instant? = null
 }

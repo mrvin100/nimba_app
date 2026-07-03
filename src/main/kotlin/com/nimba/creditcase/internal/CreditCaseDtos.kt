@@ -38,6 +38,7 @@ data class CreditCaseResponse(
     val status: CreditCaseStatus,
     val createdAt: Instant,
     val accountNumber: String?,
+    val archivedAt: Instant?,
 )
 
 internal fun CreditCaseInfo.toResponse(): CreditCaseResponse =
@@ -50,6 +51,7 @@ internal fun CreditCaseInfo.toResponse(): CreditCaseResponse =
         status = status,
         createdAt = createdAt,
         accountNumber = accountNumber,
+        archivedAt = archivedAt,
     )
 
 /** Row in the dashboard's credit-case list. */
@@ -60,6 +62,7 @@ data class CreditCaseSummaryResponse(
     val productType: ProductType,
     val status: CreditCaseStatus,
     val createdAt: Instant,
+    val archivedAt: Instant?,
 )
 
 internal fun CreditCaseInfo.toSummaryResponse(): CreditCaseSummaryResponse =
@@ -70,4 +73,5 @@ internal fun CreditCaseInfo.toSummaryResponse(): CreditCaseSummaryResponse =
         productType = productType,
         status = status,
         createdAt = createdAt,
+        archivedAt = archivedAt,
     )
