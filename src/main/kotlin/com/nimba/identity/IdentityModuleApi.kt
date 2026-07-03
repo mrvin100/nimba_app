@@ -12,9 +12,6 @@ import java.util.UUID
 interface IdentityModuleApi {
     fun findUser(userId: UUID): UserInfo?
 
-    /** The configured organisation display name (printed on generated documents). */
-    fun organizationName(): String
-
     /** The configured organisation logo, or null when none has been uploaded. */
     fun organizationLogo(): OrganizationLogo?
 }

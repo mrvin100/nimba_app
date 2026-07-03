@@ -9,7 +9,6 @@ import org.apache.poi.xwpf.usermodel.BreakType
 import org.apache.poi.xwpf.usermodel.Document
 import org.apache.poi.xwpf.usermodel.ParagraphAlignment
 import org.apache.poi.xwpf.usermodel.TableRowAlign
-import org.apache.poi.xwpf.usermodel.UnderlinePatterns
 import org.apache.poi.xwpf.usermodel.XWPFDocument
 import org.apache.poi.xwpf.usermodel.XWPFParagraph
 import org.apache.poi.xwpf.usermodel.XWPFRun
@@ -78,7 +77,6 @@ class TradeDocxExportService(
         }
         val version = schedules.findById(active.first().scheduleId).orElse(null)?.versionNumber ?: 0
         val issueDate = active.first().dueDate
-        val organizationName = identity.organizationName()
         val logo = identity.organizationLogo()
 
         // The traité prints the client's account when it is captured on the case;
@@ -88,7 +86,7 @@ class TradeDocxExportService(
         val document = XWPFDocument()
         configureA4(document)
         active.forEachIndexed { index, trade ->
-            renderTraite(document, trade, case.clientName, case.currency, accountNumber, issueDate, organizationName, logo)
+            renderTraite(document, trade, case.clientName, case.currency, accountNumber, issueDate, logo)
             if (index < active.size - 1) {
                 // Word merges adjacent tables, so a separator paragraph is mandatory
                 // between two traités; it also carries the page break closing each
@@ -130,7 +128,6 @@ class TradeDocxExportService(
         currency: String,
         accountNumber: String,
         issueDate: LocalDate,
-        organizationName: String,
         logo: OrganizationLogo?,
     ) {
         val table = document.createTable(1, 1)
@@ -140,7 +137,7 @@ class TradeDocxExportService(
         table.getRow(0).isCantSplitRow = true
         val cell = table.getRow(0).getCell(0)
 
-        header(cell, organizationName, logo)
+        header(cell, logo)
         blank(cell)
         labelLine(cell, "Tireur", traite.tireur, valueBold = true)
         labelLine(cell, "Genre d'activité", traite.genreActivite, valueBold = true)
@@ -177,18 +174,25 @@ class TradeDocxExportService(
         addTabStop(acceptance, STTabJc.RIGHT, ACCEPTANCE_TAB_TWIPS)
         run(acceptance, "POUR ACCEPTATION :", bold = true).addTab()
         run(acceptance, "${traite.place}, le ${longDate(issueDate)}", bold = true)
+
+        // Free space under the acceptance line so both parties can sign on paper.
+        signatureSpace(cell)
     }
 
-    /** Logo and underlined organisation name at the head of the traité. */
+    /** Blank area (~1 cm) reserved for the handwritten signatures. */
+    private fun signatureSpace(cell: XWPFTableCell) {
+        repeat(2) {
+            run(paragraph(cell), " ", size = SIGNATURE_LINE_FONT_SIZE_PT)
+        }
+    }
+
+    /** The organisation logo alone at the head of the traité (the logo already carries the brand). */
     private fun header(
         cell: XWPFTableCell,
-        organizationName: String,
         logo: OrganizationLogo?,
     ) {
         val paragraph = cell.paragraphs.first().also { it.spacingAfter = 0 }
         logo?.let { renderLogo(paragraph, it) }
-        run(paragraph, "  $organizationName", bold = true, size = TITLE_FONT_SIZE_PT)
-            .underline = UnderlinePatterns.SINGLE
     }
 
     /** Embeds the logo at a fixed height, preserving its aspect ratio. */
@@ -337,8 +341,10 @@ class TradeDocxExportService(
 
         /** Compact type so three traités fit on one A4 page. */
         const val FONT_SIZE_PT = 10
-        const val TITLE_FONT_SIZE_PT = 11
         const val BLANK_FONT_SIZE_PT = 6
+
+        /** Two lines of this size ≈ 1 cm of signature room per traité. */
+        const val SIGNATURE_LINE_FONT_SIZE_PT = 12
         const val LOGO_HEIGHT_PX = 34
         const val TRAITES_PER_PAGE = 3
 

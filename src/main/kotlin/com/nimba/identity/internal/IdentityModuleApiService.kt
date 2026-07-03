@@ -11,13 +11,9 @@ import java.util.UUID
 class IdentityModuleApiService(
     private val users: UserRepository,
     private val logos: OrganizationLogoService,
-    private val organization: OrganizationSettingsService,
 ) : IdentityModuleApi {
     @Transactional(readOnly = true)
     override fun findUser(userId: UUID): UserInfo? = users.findById(userId).map { it.toUserInfo() }.orElse(null)
-
-    @Transactional(readOnly = true)
-    override fun organizationName(): String = organization.get().organizationName
 
     @Transactional(readOnly = true)
     override fun organizationLogo(): OrganizationLogo? = logos.find()?.let { OrganizationLogo(it.bytes, it.contentType) }
