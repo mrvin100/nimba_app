@@ -153,6 +153,23 @@ class TradeExportEndpointTest(
         // appear exactly once per traité, never doubled.
         assertContains(text, "Francs Guinéens")
         assertTrue(!text.contains("Francs Guinéens Francs Guinéens"), "currency wording must not be duplicated")
+
+        // The acceptance line accepts a signature date chosen at download time;
+        // it lands on every traité in the long French form.
+        val dated =
+            client.send(
+                HttpRequest
+                    .newBuilder(URI("${base(created.id)}/trades/export/docx?signatureDate=2026-01-15"))
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofByteArray(),
+            )
+        assertEquals(200, dated.statusCode())
+        val datedText =
+            XWPFDocument(ByteArrayInputStream(dated.body())).use { document ->
+                XWPFWordExtractor(document).use { it.text }
+            }
+        assertEquals(25, Regex(Regex.escape("le 15 Janvier 2026")).findAll(datedText).count())
     }
 
     @Test

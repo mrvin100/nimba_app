@@ -73,17 +73,21 @@ class TradeDocxExportService(
         )
 
     @Transactional(readOnly = true)
-    fun export(creditCaseId: UUID): TradeExport {
+    fun export(
+        creditCaseId: UUID,
+        signatureDate: LocalDate? = null,
+    ): TradeExport {
         val case = creditCases.getOrThrow(creditCaseId)
         val active = trades.findByCreditCaseIdAndActiveIsTrueOrderByDueDateAsc(creditCaseId)
         if (active.isEmpty()) {
             throw ResponseStatusException(HttpStatus.NOT_FOUND, "Aucun trade actif à exporter pour ce dossier.")
         }
         val version = schedules.findById(active.first().scheduleId).orElse(null)?.versionNumber ?: 0
-        // The acceptance line is dated the day the document is produced — the
-        // parties sign it that day; the lettre de change's own maturity is the due
-        // date already printed in the payment order.
-        val issueDate = LocalDate.now(clock)
+        // The acceptance line carries the signature date: the day the document is
+        // produced by default, or the date the analyst chose at download time. The
+        // lettre de change's own maturity is the due date already printed in the
+        // payment order.
+        val issueDate = signatureDate ?: LocalDate.now(clock)
         val logo = identity.organizationLogo()
 
         // The traité prints the client's account when it is captured on the case;
