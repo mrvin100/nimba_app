@@ -4,14 +4,12 @@ import com.nimba.shared.CurrentUser
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
-import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
-import org.springframework.web.server.ResponseStatusException
 
 /** Self-service profile update (currently the display name). */
 data class UpdateProfileRequest(
@@ -29,10 +27,7 @@ class ProfileService(
 ) {
     @Transactional
     fun updateName(request: UpdateProfileRequest): MeResponse {
-        val user =
-            users.findById(currentUser.id()).orElseThrow {
-                ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentification requise")
-            }
+        val user = users.caller(currentUser)
         user.fullName = request.fullName
         return user.toMeResponse()
     }

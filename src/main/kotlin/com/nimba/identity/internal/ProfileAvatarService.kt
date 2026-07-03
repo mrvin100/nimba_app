@@ -43,8 +43,5 @@ class ProfileAvatarService(
         return storage.load(key)
     }
 
-    private fun current(): User =
-        users.findById(currentUser.id()).orElseThrow {
-            ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentification requise")
-        }
+    private fun current(): User = users.caller(currentUser)
 }

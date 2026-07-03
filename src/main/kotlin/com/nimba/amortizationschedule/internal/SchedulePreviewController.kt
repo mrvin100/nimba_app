@@ -1,6 +1,7 @@
 package com.nimba.amortizationschedule.internal
 
 import com.nimba.creditcase.CreditCaseModuleApi
+import com.nimba.creditcase.getOrThrow
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -29,8 +30,7 @@ class SchedulePreviewController(
         @PathVariable caseId: UUID,
         @RequestParam("file") file: MultipartFile,
     ): PreviewResponse {
-        creditCases.findById(caseId)
-            ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Dossier introuvable")
+        creditCases.getOrThrow(caseId)
 
         val result = file.inputStream.use { validation.validate(it) }
         if (result.fatal) {

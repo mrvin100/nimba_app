@@ -12,4 +12,6 @@ data class CreateCreditCaseCommand(
     val productType: ProductType,
     val currency: String,
     val createdBy: UUID,
+    /** The client's account number at the bank (printed on the traités). */
+    val accountNumber: String? = null,
 )

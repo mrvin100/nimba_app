@@ -1,6 +1,7 @@
 package com.nimba.amortizationschedule.internal
 
 import com.nimba.creditcase.CreditCaseModuleApi
+import com.nimba.creditcase.getOrThrow
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -28,8 +29,7 @@ class TradeGenerationService(
     @Transactional
     fun generate(creditCaseId: UUID): List<Trade> {
         val case =
-            creditCases.findById(creditCaseId)
-                ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Dossier introuvable")
+            creditCases.getOrThrow(creditCaseId)
         val schedule =
             schedules.findFirstByCreditCaseIdOrderByVersionNumberDesc(creditCaseId)
                 ?: throw ResponseStatusException(

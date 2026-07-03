@@ -2,9 +2,12 @@ package com.nimba.identity.internal
 
 import com.nimba.identity.AccountStatus
 import com.nimba.identity.Department
+import com.nimba.shared.CurrentUser
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
+import org.springframework.http.HttpStatus
+import org.springframework.web.server.ResponseStatusException
 import java.util.UUID
 
 interface UserRepository : JpaRepository<User, UUID> {
@@ -36,3 +39,13 @@ interface UserRepository : JpaRepository<User, UUID> {
         @Param("departments") departments: Collection<Department>,
     ): List<User>
 }
+
+/**
+ * Loads the calling user's entity from the security context; 401 when the session
+ * no longer maps to an account. One definition so every self-service path (profile,
+ * avatar, team, /auth/me) resolves the caller identically.
+ */
+internal fun UserRepository.caller(currentUser: CurrentUser): User =
+    findById(currentUser.id()).orElseThrow {
+        ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentification requise")
+    }

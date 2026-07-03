@@ -4,8 +4,8 @@ import com.nimba.TestcontainersConfiguration
 import com.nimba.creditcase.CreateCreditCaseCommand
 import com.nimba.creditcase.CreditCaseModuleApi
 import com.nimba.creditcase.ProductType
-import com.nimba.identity.internal.User
 import com.nimba.identity.internal.UserRepository
+import com.nimba.seedDriAnalyst
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
@@ -32,15 +32,7 @@ class SchedulePreviewEndpointTest(
 ) {
     private val boundary = "----NimbaTestBoundary"
 
-    private fun analystId(): UUID {
-        val existing = users.findByEmail("preview@banque.test")
-        return existing?.id ?: requireNotNull(
-            users
-                .saveAndFlush(
-                    User("Analyste Preview", "preview@banque.test", requireNotNull(passwordEncoder.encode("Pass-Word"))),
-                ).id,
-        )
-    }
+    private fun analystId(): UUID = requireNotNull(seedDriAnalyst(users, passwordEncoder, "preview@banque.test").id)
 
     private fun authenticatedClient(): HttpClient {
         analystId()

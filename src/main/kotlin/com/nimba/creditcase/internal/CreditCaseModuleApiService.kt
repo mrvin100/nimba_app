@@ -6,6 +6,9 @@ import com.nimba.creditcase.CreditCaseModuleApi
 import com.nimba.creditcase.CreditCaseStatus
 import com.nimba.creditcase.UpdateCreditCaseCommand
 import com.nimba.identity.IdentityModuleApi
+import com.nimba.shared.getOrThrow
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -34,6 +37,7 @@ class CreditCaseModuleApiService(
                     productType = command.productType,
                     currency = command.currency,
                     createdBy = command.createdBy,
+                    accountNumber = command.accountNumber?.takeIf { it.isNotBlank() },
                 ),
             )
         return saved.toCreditCaseInfo()
@@ -44,16 +48,17 @@ class CreditCaseModuleApiService(
         id: UUID,
         command: UpdateCreditCaseCommand,
     ): CreditCaseInfo {
-        val case =
-            creditCases
-                .findById(id)
-                .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Dossier introuvable") }
+        val case = creditCases.getOrThrow(id, "Dossier introuvable")
         case.clientName = command.clientName
         case.productType = command.productType
         case.currency = command.currency
+        case.accountNumber = command.accountNumber?.takeIf { it.isNotBlank() }
         case.updatedAt = Instant.now()
         return case.toCreditCaseInfo()
     }
+
+    @Transactional(readOnly = true)
+    override fun list(pageable: Pageable): Page<CreditCaseInfo> = creditCases.findAll(pageable).map { it.toCreditCaseInfo() }
 
     @Transactional(readOnly = true)
     override fun findById(id: UUID): CreditCaseInfo? = creditCases.findById(id).map { it.toCreditCaseInfo() }.orElse(null)
@@ -63,10 +68,7 @@ class CreditCaseModuleApiService(
 
     @Transactional
     override fun markTradesGenerated(creditCaseId: UUID) {
-        val case =
-            creditCases
-                .findById(creditCaseId)
-                .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Dossier introuvable") }
+        val case = creditCases.getOrThrow(creditCaseId, "Dossier introuvable")
         case.status = CreditCaseStatus.TRADES_GENERES
         case.updatedAt = Instant.now()
     }
@@ -82,4 +84,5 @@ internal fun CreditCase.toCreditCaseInfo(): CreditCaseInfo =
         status = status,
         createdBy = createdBy,
         createdAt = createdAt,
+        accountNumber = accountNumber,
     )

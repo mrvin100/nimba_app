@@ -17,4 +17,6 @@ data class CreditCaseInfo(
     val status: CreditCaseStatus,
     val createdBy: UUID,
     val createdAt: Instant,
+    /** The client's account number at the bank; null until captured on the case. */
+    val accountNumber: String? = null,
 )

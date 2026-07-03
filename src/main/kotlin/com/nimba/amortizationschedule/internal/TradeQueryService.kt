@@ -1,10 +1,9 @@
 package com.nimba.amortizationschedule.internal
 
 import com.nimba.creditcase.CreditCaseModuleApi
-import org.springframework.http.HttpStatus
+import com.nimba.creditcase.getOrThrow
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import org.springframework.web.server.ResponseStatusException
 import java.util.UUID
 
 /**
@@ -19,8 +18,7 @@ class TradeQueryService(
 ) {
     @Transactional(readOnly = true)
     fun activeTrades(creditCaseId: UUID): List<Trade> {
-        creditCases.findById(creditCaseId)
-            ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Dossier introuvable")
+        creditCases.getOrThrow(creditCaseId)
         return trades.findByCreditCaseIdAndActiveIsTrueOrderByDueDateAsc(creditCaseId)
     }
 }

@@ -1,5 +1,7 @@
 package com.nimba.audit.internal
 
+import com.nimba.shared.PageResponse
+import com.nimba.shared.toPageResponse
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
 import org.springframework.data.web.PageableDefault
@@ -24,16 +26,6 @@ data class AuditEventResponse(
     val correlationId: String?,
 )
 
-data class AuditPage(
-    val content: List<AuditEventResponse>,
-    val page: Int,
-    val size: Int,
-    val totalElements: Long,
-    val totalPages: Int,
-    val hasNext: Boolean,
-    val hasPrevious: Boolean,
-)
-
 /**
  * Read-only audit trail API (NIMBA-40). Under the admin path tree, so it requires
  * ROLE_ADMIN (security config). Newest first.
@@ -50,21 +42,12 @@ class AuditController(
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) to: LocalDate?,
         @RequestParam(required = false) method: String?,
         @RequestParam(required = false) status: Int?,
-    ): AuditPage {
+    ): PageResponse<AuditEventResponse> {
         // Date filters are calendar days (UTC): [from 00:00, to+1 00:00) so `to` is inclusive.
         val fromInstant = from?.atStartOfDay(ZoneOffset.UTC)?.toInstant()
         val toInstant = to?.plusDays(1)?.atStartOfDay(ZoneOffset.UTC)?.toInstant()
         val filter = auditFilter(fromInstant, toInstant, method?.takeIf { it.isNotBlank() }?.uppercase(), status)
-        val page = events.findAll(filter, pageable)
-        return AuditPage(
-            content = page.content.map { it.toResponse() },
-            page = page.number,
-            size = page.size,
-            totalElements = page.totalElements,
-            totalPages = page.totalPages,
-            hasNext = page.hasNext(),
-            hasPrevious = page.hasPrevious(),
-        )
+        return events.findAll(filter, pageable).toPageResponse { it.toResponse() }
     }
 
     private fun AuditEvent.toResponse() =

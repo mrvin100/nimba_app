@@ -1,8 +1,8 @@
 package com.nimba.creditcase
 
 import com.nimba.TestcontainersConfiguration
-import com.nimba.identity.internal.User
 import com.nimba.identity.internal.UserRepository
+import com.nimba.seedDriAnalyst
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -28,15 +28,7 @@ class CreateCreditCaseEndpointTest(
 ) {
     @BeforeEach
     fun seedAnalyst() {
-        if (users.findByEmail("creator@banque.test") == null) {
-            users.saveAndFlush(
-                User(
-                    fullName = "Analyste Créateur",
-                    email = "creator@banque.test",
-                    passwordHash = requireNotNull(passwordEncoder.encode("Pass-Word")),
-                ),
-            )
-        }
+        seedDriAnalyst(users, passwordEncoder, "creator@banque.test")
     }
 
     private fun authenticatedClient(): HttpClient {
@@ -62,13 +54,17 @@ class CreateCreditCaseEndpointTest(
         val response =
             client.send(
                 request("/api/v1/credit-cases")
-                    .POST(json("""{"clientName":"ETS OC ET FRERES","productType":"LEASING","currency":"GNF"}"""))
-                    .build(),
+                    .POST(
+                        json(
+                            """{"clientName":"ETS OC ET FRERES","productType":"LEASING","currency":"GNF","accountNumber":"0102386501-90"}""",
+                        ),
+                    ).build(),
                 HttpResponse.BodyHandlers.ofString(),
             )
 
         assertEquals(201, response.statusCode(), "body=${response.body()}")
         assertContains(response.body(), "ETS OC ET FRERES")
+        assertContains(response.body(), "0102386501-90")
         assertTrue(Regex("""DOS-\d{4}-\d{4}""").containsMatchIn(response.body()), "expected a case number; body=${response.body()}")
     }
 

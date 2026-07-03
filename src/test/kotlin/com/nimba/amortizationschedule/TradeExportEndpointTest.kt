@@ -4,8 +4,10 @@ import com.nimba.TestcontainersConfiguration
 import com.nimba.creditcase.CreateCreditCaseCommand
 import com.nimba.creditcase.CreditCaseModuleApi
 import com.nimba.creditcase.ProductType
-import com.nimba.identity.internal.User
 import com.nimba.identity.internal.UserRepository
+import com.nimba.seedDriAnalyst
+import org.apache.poi.xwpf.extractor.XWPFWordExtractor
+import org.apache.poi.xwpf.usermodel.XWPFDocument
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
@@ -13,6 +15,7 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.test.context.TestPropertySource
+import java.io.ByteArrayInputStream
 import java.io.File
 import java.net.CookieManager
 import java.net.URI
@@ -35,12 +38,7 @@ class TradeExportEndpointTest(
 ) {
     private val boundary = "----NimbaExportBoundary"
 
-    private fun analystId(): UUID {
-        val existing = users.findByEmail("export@banque.test")
-        return existing?.id ?: requireNotNull(
-            users.saveAndFlush(User("Analyste Export", "export@banque.test", requireNotNull(passwordEncoder.encode("Pass-Word")))).id,
-        )
-    }
+    private fun analystId(): UUID = requireNotNull(seedDriAnalyst(users, passwordEncoder, "export@banque.test").id)
 
     private fun authenticatedClient(): HttpClient {
         analystId()
@@ -113,7 +111,10 @@ class TradeExportEndpointTest(
     @Test
     fun `exports the active trades as a downloadable Word document`() {
         val client = authenticatedClient()
-        val created = creditCases.createCase(CreateCreditCaseCommand("ETS OC ET FRERES", ProductType.LEASING, "GNF", analystId()))
+        val created =
+            creditCases.createCase(
+                CreateCreditCaseCommand("ETS OC ET FRERES", ProductType.LEASING, "GNF", analystId(), "0102386501-90"),
+            )
         uploadValidAndGenerate(client, created.id)
 
         val response =
@@ -127,9 +128,23 @@ class TradeExportEndpointTest(
         assertContains(response.headers().firstValue("Content-Type").orElse(""), "wordprocessingml")
         val body = response.body()
         assertTrue(body.size > 1000, "the .docx should contain the traités")
-        // A .docx is a ZIP archive: it begins with the "PK" signature.
-        assertEquals('P'.code.toByte(), body[0])
-        assertEquals('K'.code.toByte(), body[1])
+
+        // Open the document and check the rendered traités themselves.
+        val text =
+            XWPFDocument(ByteArrayInputStream(body)).use { document ->
+                XWPFWordExtractor(document).use { it.text }
+            }
+        // One traité per trade — 25 échéances, each carrying the full block.
+        assertEquals(25, Regex("Tireur").findAll(text).count())
+        assertEquals(25, Regex("POUR ACCEPTATION").findAll(text).count())
+        assertContains(text, "ETS OC ET FRERES")
+        assertContains(text, "Lettre de Change")
+        // The client's account number captured on the case is what the traité prints.
+        assertContains(text, "0102386501-90")
+        // The amount in words already ends with the currency wording: it must
+        // appear exactly once per traité, never doubled.
+        assertContains(text, "Francs Guinéens")
+        assertTrue(!text.contains("Francs Guinéens Francs Guinéens"), "currency wording must not be duplicated")
     }
 
     @Test

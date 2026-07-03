@@ -1,15 +1,20 @@
 package com.nimba.amortizationschedule.internal
 
 import com.nimba.creditcase.CreditCaseModuleApi
+import com.nimba.creditcase.getOrThrow
 import com.nimba.identity.IdentityModuleApi
 import com.nimba.identity.OrganizationLogo
 import org.apache.poi.util.Units
 import org.apache.poi.xwpf.usermodel.BreakType
 import org.apache.poi.xwpf.usermodel.Document
 import org.apache.poi.xwpf.usermodel.ParagraphAlignment
+import org.apache.poi.xwpf.usermodel.TableRowAlign
 import org.apache.poi.xwpf.usermodel.XWPFDocument
 import org.apache.poi.xwpf.usermodel.XWPFParagraph
 import org.apache.poi.xwpf.usermodel.XWPFRun
+import org.apache.poi.xwpf.usermodel.XWPFTable
+import org.apache.poi.xwpf.usermodel.XWPFTableCell
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.STTabJc
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -17,6 +22,7 @@ import org.springframework.web.server.ResponseStatusException
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.math.BigDecimal
+import java.math.BigInteger
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.time.LocalDate
@@ -27,13 +33,15 @@ import javax.imageio.ImageIO
 
 /**
  * Builds the Word (.docx) document of a case's active trades — the lettres de change
- * (traités), one traité per échéance in two copies (bank + client), matching the
- * bank's traité layout (NIMBA-27). Each traité is rendered strictly from the
- * generated [Trade] (due date, amount in figures and in words, currency) and the
- * case (the tiré / lessee), plus the bank-side constants ([TraiteProperties]) and the
- * organisation logo (from the identity module), so the document is coherent with the
- * imported schedule end to end and visually matches the reference model: Candara 14pt,
- * the logo at the head of each copy, labels in normal weight with their values in bold.
+ * (traités) — matching the bank's reference layout (NIMBA-27): each traité is a
+ * bordered box holding the logo and organisation name, the tireur block, the payment
+ * order, the amount in a small bordered box (currency | figures) followed by the
+ * amount in words, then the tiré block and the acceptance line. Three traités are
+ * laid out per A4 page (compact Candara type, keep-together rows) so a 25-échéance
+ * schedule prints on nine pages ready to cut. Everything is rendered strictly from
+ * the generated [Trade] (due date, amount in figures and words, currency), the case
+ * (the tiré / lessee), the bank-side constants ([TraiteProperties]) and the
+ * organisation identity (name + logo from the identity module).
  */
 @Service
 class TradeDocxExportService(
@@ -62,9 +70,7 @@ class TradeDocxExportService(
 
     @Transactional(readOnly = true)
     fun export(creditCaseId: UUID): TradeExport {
-        val case =
-            creditCases.findById(creditCaseId)
-                ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Dossier introuvable")
+        val case = creditCases.getOrThrow(creditCaseId)
         val active = trades.findByCreditCaseIdAndActiveIsTrueOrderByDueDateAsc(creditCaseId)
         if (active.isEmpty()) {
             throw ResponseStatusException(HttpStatus.NOT_FOUND, "Aucun trade actif à exporter pour ce dossier.")
@@ -73,12 +79,20 @@ class TradeDocxExportService(
         val issueDate = active.first().dueDate
         val logo = identity.organizationLogo()
 
+        // The traité prints the client's account when it is captured on the case;
+        // the configured bank-side default only covers legacy cases.
+        val accountNumber = case.accountNumber?.takeIf { it.isNotBlank() } ?: traite.accountNumber
+
         val document = XWPFDocument()
+        configureA4(document)
         active.forEachIndexed { index, trade ->
-            renderTraite(document, trade, case.clientName, case.currency, issueDate, logo)
-            spacer(document)
-            renderTraite(document, trade, case.clientName, case.currency, issueDate, logo)
-            if (index < active.size - 1) pageBreak(document)
+            renderTraite(document, trade, case.clientName, case.currency, accountNumber, issueDate, logo)
+            if (index < active.size - 1) {
+                // Word merges adjacent tables, so a separator paragraph is mandatory
+                // between two traités; it also carries the page break closing each
+                // group of TRAITES_PER_PAGE so a printed A4 page holds exactly three.
+                separator(document, pageBreak = index % TRAITES_PER_PAGE == TRAITES_PER_PAGE - 1)
+            }
         }
 
         val bytes =
@@ -90,21 +104,46 @@ class TradeDocxExportService(
         return TradeExport("traites-${case.caseNumber}-v$version.docx", bytes)
     }
 
+    /** A4 portrait with margins sized so three bordered traités fit per page. */
+    private fun configureA4(document: XWPFDocument) {
+        val body = document.document.body
+        val sectPr = if (body.isSetSectPr) body.sectPr else body.addNewSectPr()
+        sectPr.addNewPgSz().apply {
+            w = BigInteger.valueOf(A4_WIDTH_TWIPS)
+            h = BigInteger.valueOf(A4_HEIGHT_TWIPS)
+        }
+        sectPr.addNewPgMar().apply {
+            top = BigInteger.valueOf(MARGIN_VERTICAL_TWIPS)
+            bottom = BigInteger.valueOf(MARGIN_VERTICAL_TWIPS)
+            left = BigInteger.valueOf(MARGIN_HORIZONTAL_TWIPS)
+            right = BigInteger.valueOf(MARGIN_HORIZONTAL_TWIPS)
+        }
+    }
+
+    /** One traité = one bordered single-cell table that never splits across pages. */
     private fun renderTraite(
         document: XWPFDocument,
         trade: Trade,
         lessee: String,
         currency: String,
+        accountNumber: String,
         issueDate: LocalDate,
         logo: OrganizationLogo?,
     ) {
-        logo?.let { renderLogo(document, it) }
+        val table = document.createTable(1, 1)
+        table.setWidth(CONTENT_WIDTH_TWIPS)
+        borders(table)
+        table.setCellMargins(CELL_MARGIN_V_TWIPS, CELL_MARGIN_H_TWIPS, CELL_MARGIN_V_TWIPS, CELL_MARGIN_H_TWIPS)
+        table.getRow(0).isCantSplitRow = true
+        val cell = table.getRow(0).getCell(0)
 
-        labelLine(document, "Tireur", traite.tireur, valueBold = true)
-        labelLine(document, "Genre d'activité", traite.genreActivite, valueBold = true)
-        blank(document)
+        header(cell, logo)
+        blank(cell)
+        labelLine(cell, "Tireur", traite.tireur, valueBold = true)
+        labelLine(cell, "Genre d'activité", traite.genreActivite, valueBold = true)
+        blank(cell)
 
-        val order = document.createParagraph().also { it.alignment = ParagraphAlignment.BOTH }
+        val order = paragraph(cell).also { it.alignment = ParagraphAlignment.BOTH }
         run(order, "Veuillez payer contre cette ")
         run(order, "Lettre de Change", bold = true)
         run(order, " au ")
@@ -112,33 +151,59 @@ class TradeDocxExportService(
         run(order, " à l'ordre d'")
         run(order, traite.orderBeneficiary, bold = true)
 
-        val amount = document.createParagraph().also { it.alignment = ParagraphAlignment.BOTH }
-        run(amount, "La somme de ")
-        run(amount, "$currency ${grouped(trade.amount)} = ${trade.amountInWords} Francs Guinéens", bold = true)
+        run(paragraph(cell), "La somme de", italic = true)
+        val words = amountBox(cell, currency, grouped(trade.amount))
+        // The converted amount already carries the currency wording ("… Francs
+        // Guinéens"); it must never be suffixed again here.
+        run(words, "= ${trade.amountInWords}", bold = true, italic = true)
+        run(
+            paragraph(cell),
+            "Équivalant à la valeur représentative du crédit leasing à vous octroyer par la banque.",
+            italic = true,
+        )
+        blank(cell)
 
-        text(document, "équivalant à la valeur représentative du crédit leasing à vous octroyer par la banque.")
-        blank(document)
+        labelLine(cell, "Tiré", lessee, valueBold = false)
+        labelLine(cell, "Domiciliation", traite.domiciliation, valueBold = true)
+        labelLine(cell, "N° de compte", accountNumber, valueBold = false, valueFont = ACCOUNT_FONT)
+        labelLine(cell, "Devise", currency, valueBold = true)
+        blank(cell)
 
-        labelLine(document, "Tiré", lessee, valueBold = false)
-        labelLine(document, "Domiciliation", traite.domiciliation, valueBold = true)
-        labelLine(document, "N° de compte", traite.accountNumber, valueBold = false, valueFont = ACCOUNT_FONT)
-        labelLine(document, "Devise", currency, valueBold = true)
-        blank(document)
+        val acceptance = paragraph(cell)
+        acceptance.indentationLeft = ACCEPTANCE_INDENT_TWIPS
+        addTabStop(acceptance, STTabJc.RIGHT, ACCEPTANCE_TAB_TWIPS)
+        run(acceptance, "POUR ACCEPTATION :", bold = true).addTab()
+        run(acceptance, "${traite.place}, le ${longDate(issueDate)}", bold = true)
 
-        val acceptance = document.createParagraph().also { it.alignment = ParagraphAlignment.BOTH }
-        run(acceptance, "POUR ACCEPTATION :\t\t\t${traite.place}, le ${longDate(issueDate)}", bold = true)
+        // Free space under the acceptance line so both parties can sign on paper.
+        signatureSpace(cell)
     }
 
-    /** Places the organisation logo at the head of a traité, preserving its aspect ratio. */
+    /** Blank area (~1 cm) reserved for the handwritten signatures. */
+    private fun signatureSpace(cell: XWPFTableCell) {
+        repeat(2) {
+            run(paragraph(cell), " ", size = SIGNATURE_LINE_FONT_SIZE_PT)
+        }
+    }
+
+    /** The organisation logo alone at the head of the traité (the logo already carries the brand). */
+    private fun header(
+        cell: XWPFTableCell,
+        logo: OrganizationLogo?,
+    ) {
+        val paragraph = cell.paragraphs.first().also { it.spacingAfter = 0 }
+        logo?.let { renderLogo(paragraph, it) }
+    }
+
+    /** Embeds the logo at a fixed height, preserving its aspect ratio. */
     private fun renderLogo(
-        document: XWPFDocument,
+        paragraph: XWPFParagraph,
         logo: OrganizationLogo,
     ) {
         try {
             val image = ImageIO.read(ByteArrayInputStream(logo.bytes)) ?: return
-            val width = LOGO_WIDTH_PX
-            val height = (LOGO_WIDTH_PX.toDouble() * image.height / image.width).toInt().coerceAtLeast(1)
-            val paragraph = document.createParagraph()
+            val height = LOGO_HEIGHT_PX
+            val width = (LOGO_HEIGHT_PX.toDouble() * image.width / image.height).toInt().coerceAtLeast(1)
             ByteArrayInputStream(logo.bytes).use { stream ->
                 paragraph.createRun().addPicture(
                     stream,
@@ -153,53 +218,107 @@ class TradeDocxExportService(
         }
     }
 
+    /**
+     * The small bordered amount box (currency | figures), right-aligned like the
+     * reference. Returns the paragraph that follows the box, which the caller fills
+     * with the amount in words.
+     */
+    private fun amountBox(
+        cell: XWPFTableCell,
+        currency: String,
+        amount: String,
+    ): XWPFParagraph {
+        val anchor = paragraph(cell)
+        val cursor = anchor.ctp.newCursor()
+        val box =
+            try {
+                cell.insertNewTbl(cursor)
+            } finally {
+                cursor.close()
+            }
+        box.tableAlignment = TableRowAlign.RIGHT
+        borders(box)
+        // Unlike createTable, insertNewTbl yields a table without any row.
+        val row = box.createRow()
+        val currencyCell = row.createCell()
+        val amountCell = row.createCell()
+        currencyCell.setWidth(CURRENCY_CELL_TWIPS.toString())
+        amountCell.setWidth(AMOUNT_CELL_TWIPS.toString())
+        val currencyParagraph = currencyCell.paragraphs.first().also { it.alignment = ParagraphAlignment.CENTER }
+        run(currencyParagraph, currency, bold = true)
+        run(amountCell.paragraphs.first(), " $amount", bold = true)
+        return anchor
+    }
+
+    private fun borders(table: XWPFTable) {
+        table.setTopBorder(XWPFTable.XWPFBorderType.SINGLE, BORDER_EIGHTHS_PT, 0, BORDER_COLOR)
+        table.setBottomBorder(XWPFTable.XWPFBorderType.SINGLE, BORDER_EIGHTHS_PT, 0, BORDER_COLOR)
+        table.setLeftBorder(XWPFTable.XWPFBorderType.SINGLE, BORDER_EIGHTHS_PT, 0, BORDER_COLOR)
+        table.setRightBorder(XWPFTable.XWPFBorderType.SINGLE, BORDER_EIGHTHS_PT, 0, BORDER_COLOR)
+        table.setInsideVBorder(XWPFTable.XWPFBorderType.SINGLE, BORDER_EIGHTHS_PT, 0, BORDER_COLOR)
+        table.setInsideHBorder(XWPFTable.XWPFBorderType.SINGLE, BORDER_EIGHTHS_PT, 0, BORDER_COLOR)
+    }
+
+    /** Label line with the colon aligned on a fixed tab stop, like the reference. */
     private fun labelLine(
-        document: XWPFDocument,
+        cell: XWPFTableCell,
         label: String,
         value: String,
         valueBold: Boolean,
         valueFont: String = DEFAULT_FONT,
     ) {
-        val paragraph = document.createParagraph()
-        run(paragraph, "$label: ")
+        val paragraph = paragraph(cell)
+        addTabStop(paragraph, STTabJc.LEFT, LABEL_TAB_TWIPS)
+        run(paragraph, label).addTab()
+        run(paragraph, ": ")
         run(paragraph, value, bold = valueBold, font = valueFont)
     }
 
-    private fun text(
-        document: XWPFDocument,
-        value: String,
-        bold: Boolean = false,
-    ) {
-        run(document.createParagraph(), value, bold = bold)
+    private fun paragraph(cell: XWPFTableCell): XWPFParagraph = cell.addParagraph().also { it.spacingAfter = 0 }
+
+    private fun blank(cell: XWPFTableCell) {
+        run(paragraph(cell), " ", size = BLANK_FONT_SIZE_PT)
     }
 
-    /** Adds a styled run in the traité's typography (Candara 14pt by default). */
+    /** Compact paragraph between two traités; closes the page after each group of three. */
+    private fun separator(
+        document: XWPFDocument,
+        pageBreak: Boolean,
+    ) {
+        val paragraph = document.createParagraph().also { it.spacingAfter = 0 }
+        val separatorRun = paragraph.createRun().apply { fontSize = BLANK_FONT_SIZE_PT }
+        if (pageBreak) separatorRun.addBreak(BreakType.PAGE)
+    }
+
+    private fun addTabStop(
+        paragraph: XWPFParagraph,
+        alignment: STTabJc.Enum,
+        positionTwips: Long,
+    ) {
+        val ppr = paragraph.ctp.pPr ?: paragraph.ctp.addNewPPr()
+        val tabs = if (ppr.isSetTabs) ppr.tabs else ppr.addNewTabs()
+        tabs.addNewTab().apply {
+            `val` = alignment
+            pos = BigInteger.valueOf(positionTwips)
+        }
+    }
+
+    /** Adds a styled run in the traité's typography (compact Candara by default). */
     private fun run(
         paragraph: XWPFParagraph,
         value: String,
         bold: Boolean = false,
+        italic: Boolean = false,
         font: String = DEFAULT_FONT,
+        size: Int = FONT_SIZE_PT,
     ): XWPFRun =
         paragraph.createRun().apply {
             fontFamily = font
-            fontSize = FONT_SIZE_PT
+            fontSize = size
             isBold = bold
+            isItalic = italic
             setText(value)
         }
-
-    private fun blank(document: XWPFDocument) {
-        document.createParagraph()
-    }
-
-    private fun spacer(document: XWPFDocument): XWPFParagraph {
-        val paragraph = document.createParagraph()
-        paragraph.createRun().addBreak()
-        return paragraph
-    }
-
-    private fun pageBreak(document: XWPFDocument) {
-        document.createParagraph().createRun().addBreak(BreakType.PAGE)
-    }
 
     private fun pictureType(contentType: String): Int =
         when (contentType.lowercase()) {
@@ -219,7 +338,32 @@ class TradeDocxExportService(
     private companion object {
         const val DEFAULT_FONT = "Candara"
         const val ACCOUNT_FONT = "Tahoma"
-        const val FONT_SIZE_PT = 14
-        const val LOGO_WIDTH_PX = 200
+
+        /** Compact type so three traités fit on one A4 page. */
+        const val FONT_SIZE_PT = 10
+        const val BLANK_FONT_SIZE_PT = 6
+
+        /** Two lines of this size ≈ 1 cm of signature room per traité. */
+        const val SIGNATURE_LINE_FONT_SIZE_PT = 12
+        const val LOGO_HEIGHT_PX = 34
+        const val TRAITES_PER_PAGE = 3
+
+        /** A4 portrait geometry, in twips (1/20 pt). */
+        const val A4_WIDTH_TWIPS = 11906L
+        const val A4_HEIGHT_TWIPS = 16838L
+        const val MARGIN_VERTICAL_TWIPS = 567L
+        const val MARGIN_HORIZONTAL_TWIPS = 720L
+        const val CONTENT_WIDTH_TWIPS = (A4_WIDTH_TWIPS - 2 * MARGIN_HORIZONTAL_TWIPS).toInt()
+
+        /** Inner box geometry. */
+        const val CELL_MARGIN_V_TWIPS = 60
+        const val CELL_MARGIN_H_TWIPS = 170
+        const val LABEL_TAB_TWIPS = 2000L
+        const val ACCEPTANCE_INDENT_TWIPS = 720
+        const val ACCEPTANCE_TAB_TWIPS = 9600L
+        const val CURRENCY_CELL_TWIPS = 900
+        const val AMOUNT_CELL_TWIPS = 2600
+        const val BORDER_EIGHTHS_PT = 8
+        const val BORDER_COLOR = "000000"
     }
 }

@@ -1,94 +1,114 @@
 # Nimba — Backend Service
 
-Internal banking platform for managing the credit-case lifecycle (codename Prodigy).
-This phase delivers the core flow: upload an amortization-schedule CSV → preview →
-persist → generate the resulting trades. This is the backend service: Kotlin + Spring
-Boot + Spring Modulith, exposing a versioned REST API under `/api/v1`. The frontend
-lives in the sibling `web/` service.
+> Internal banking platform for the credit-case lifecycle (codename **Prodigy**).
+> Kotlin · Spring Boot 4.1 · Spring Modulith 2.1 · PostgreSQL — a **modular
+> monolith** exposing a versioned REST API under `/api/v1`, consumed by the
+> sibling [`web/`](../web) Next.js service.
 
-## Tech stack
+Core flow of this phase: upload an amortization-schedule CSV → preview → persist →
+generate the trades (lettres de change) → export CSV / Word (3 traités per A4 page)
+→ server-computed amortization analytics.
 
-| Technology | Version |
+## 📚 Documentation map
+
+| Document | Purpose |
 |---|---|
-| Kotlin | 2.3.21 |
-| Spring Boot | 4.1.0 |
-| Spring Modulith | 2.1.0 |
-| Java toolchain | 25 |
-| Build | Gradle (Kotlin DSL) |
-| Database | PostgreSQL 16+ (on-premise in staging/production; Docker locally) |
+| [`docs/architecture.md`](docs/architecture.md) | System context, module map, layer shape, infra data flows, full API surface, RBAC |
+| [`AGENTS.md`](AGENTS.md) | Hard engineering rules (boundaries, commits, env, tests) — read before contributing |
+| [`docs/nimba-mvp-backlog.md`](../docs/nimba-mvp-backlog.md) | Single source of truth for scope and acceptance criteria |
+| This file | Quick start + the canonical patterns to copy when adding a feature |
 
-## Module structure
+## 🚀 Quick start
 
-Each package directly under `com.nimba` is an independent Spring Modulith application
-module, exposing only its `*ModuleApi` to other modules. No cross-module access to
-another module's internal types or repositories.
+```bash
+docker compose up -d          # PostgreSQL (+ MinIO, Mailpit for dev)
+./gradlew bootRun             # app reads .env via spring.config.import
+# Swagger UI: http://localhost:8080/swagger-ui/index.html
+```
+
+A fresh clone runs with zero configuration (every variable has a local default —
+see [`.env.example`](.env.example)). Full build (needs Docker for Testcontainers):
+
+```bash
+./gradlew build               # tests + ktlintCheck + koverVerify (70% on business logic)
+```
+
+## 🧱 Architecture in one diagram
 
 ```
 com.nimba
-├── NimbaApplication        # @Modulithic entry point
-├── identity                # DRI analyst account, session authentication
-├── creditcase              # minimal client credit file
-├── amortizationschedule    # CSV upload → preview → persist → trade generation (core)
-└── shared                  # genuinely cross-cutting code only
+├── shared                  cross-cutting ONLY: ApiProperties, CurrentUser, PageResponse,
+│                           getOrThrow, SecurityConfig, WebConfig, ApiExceptionHandler
+├── identity  ◄────────┐    users+RBAC, session auth, invitations, org settings, avatars
+├── creditcase ◄───┐   │    the dossier (client credit file)
+├── amortizationschedule │  CSV → preview → persist → trades → exports → analytics
+└── audit                    mutation audit trail (interceptor + admin read API)
+     (arrows = allowed dependencies, ALWAYS through the target's *ModuleApi facade)
 ```
 
-The module boundaries are enforced by an architecture test (`com.nimba.ModularityTests`)
-that runs in the standard test suite and fails the build on any boundary violation or
-dependency cycle. It performs static analysis only and needs no database or Docker.
+`ModularityTests` fails the build on any boundary violation. Details, data flows
+(PostgreSQL / MinIO / SMTP / local disk) and the endpoint table:
+[`docs/architecture.md`](docs/architecture.md).
 
-This is a **mono-tenant** service (a single bank) with **session-cookie** authentication
-(no JWT). See `AGENTS.md` for why these differ deliberately from the sibling Jiku
-project.
+## 🧩 Adding a feature — the canonical module shape
 
-## Prerequisites
+Every module is this exact skeleton; copy it, never invent a new layout:
 
-- JDK 25 (the Gradle toolchain targets Java 25)
-- Docker (for a local PostgreSQL instance and for integration tests via Testcontainers)
-
-## Local development
-
-The application code runs **natively** (`./gradlew bootRun`). Infrastructure it depends
-on — PostgreSQL today, any further services later — runs in **Docker** via
-`docker compose`. A fresh clone needs no `.env`: `docker-compose.yml` and
-`application.yaml` share the same `POSTGRES_*` variables and defaults, so the two steps
-below just work.
-
-```bash
-# 1. Start backing services (PostgreSQL) in Docker
-docker compose up -d
-
-# 2. Run the service natively against them
-./gradlew bootRun
+```
+com.nimba.<module>/
+├── <Module>ModuleApi.kt          public facade (the ONLY thing other modules may call)
+├── <X>Command.kt / <X>Info.kt    public DTOs crossing the boundary
+└── internal/
+    ├── <Module>.kt               @Entity — BigDecimal money, LocalDate business dates,
+    │                             Instant (UTC) technical timestamps
+    ├── <Module>Repository.kt     JpaRepository, derived queries only
+    ├── <Module>ModuleApiService.kt  @Service @Transactional — implements the facade,
+    │                             the ONLY writer; cross-module via other *ModuleApi
+    ├── <Module>Controller.kt     thin: @Valid Request → Command → facade → Info → Response
+    └── <Module>Dtos.kt           *Request/*Response + colocated toXxx() mappers
 ```
 
-Other useful commands:
+Rules that keep the codebase uniform (enforced by review + shared helpers):
 
-```bash
-# Full build: compile, ktlint, unit + architecture tests, integration tests
-./gradlew build
+- **Pagination**: every list endpoint returns `shared.PageResponse<T>` via
+  `Page.toPageResponse(...)` — never a hand-rolled envelope.
+- **Errors**: everything surfaces as RFC 7807 problem detail
+  (`spring.mvc.problemdetails.enabled` + `shared/web/ApiExceptionHandler`); domain
+  rejections with a body (422 upload, bulk import) keep module-local advice.
+- **Not found**: `repository.getOrThrow(id, message)` /
+  `CreditCaseModuleApi.getOrThrow(id)` — one 404 per concept.
+- **Current user**: `shared.CurrentUser` (controllers *and* services); identity-internal
+  `UserRepository.caller()` for self-service paths.
+- **Config**: single `application.yaml`, every env-dependent value is
+  `${ENV_VAR:default}` — never a literal.
+- **Schema**: owned by Flyway (`V*.sql`); Hibernate only validates.
+- **New migration** = next `V<n>__snake_case.sql`; never edit an applied one.
 
-# Module-boundary architecture verification only (no Docker needed)
-./gradlew test --tests "com.nimba.ModularityTests"
+### Authorization (3 tiers, in this order)
 
-# Coverage gate (70% on business logic)
-./gradlew koverVerify
+1. `SecurityConfig` URL matchers — public entry points, `/admin/**` → `ROLE_ADMIN`,
+   `/credit-cases/**` → `ROLE_DRI_MEMBER` (RoleHierarchy: `{DEPT}_MANAGER > {DEPT}_MEMBER`).
+2. `@PreAuthorize` for role-only method gates.
+3. Data-scoped rules a matcher cannot express live in the owning service
+   (e.g. `TeamService`: a manager only touches members of directions they manage).
 
-# Auto-fix formatting before committing
-./gradlew ktlintFormat
-```
+### Testing pattern
 
-Configuration lives in a single `application.yaml` (see `.env.example`). Every
-environment-specific value is a `${ENV_VAR:default}` placeholder: defaults keep local
-zero-config, and any other environment overrides the variables. Schema is owned by
-Flyway migrations under `src/main/resources/db/migration`.
+Endpoint tests authenticate through the real login flow with JDK `HttpClient` +
+`CookieManager` (TestRestTemplate is gone in Boot 4.1); seed analysts with
+`com.nimba.TestUsers.seedDriAnalyst` (grants the DRI membership the business
+surface requires). Testcontainers provisions PostgreSQL. Business analytics use
+the injected `Clock`.
 
-> Integration tests and `bootRun` require PostgreSQL. The integration test suite
-> provisions one automatically through Testcontainers, so Docker must be available when
-> running the full `./gradlew build`.
+## ⚙️ Environment
 
-## Engineering rules
+Same `POSTGRES_*` names as `docker-compose.yml` (one `.env` drives both).
+Key toggles: `NIMBA_SEED_*` (none — provisioning is bootstrap+invitation),
+`MAIL_ENABLED`, `MINIO_*`, `nimba.traite.*` (bank constants printed on traités),
+`API_BASE_PATH` (the API version lives here only).
 
-See `AGENTS.md` (and `CLAUDE.md`) in this directory for the full set of rules every
-contributor — human or AI — must follow: module boundaries, mono-tenancy,
-Conventional Commits, no hardcoded configuration, and the no-AI-authorship-trace rule.
-These are not optional.
+## 📄 Conventions
+
+Conventional Commits `<type>(<module>): …` + `Refs: NIMBA-<n>` trailer · branch
+`nimba-{n}-{slug}` from `develop` · squash-merge via PR · run
+`./gradlew ktlintCheck build` before opening a PR · no AI authorship trace anywhere.

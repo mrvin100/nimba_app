@@ -42,6 +42,13 @@ spring:
       # (NIMBA-19). Oversized uploads are rejected before parsing.
       max-file-size: ${CSV_UPLOAD_MAX_FILE_SIZE:2MB}
       max-request-size: ${CSV_UPLOAD_MAX_FILE_SIZE:2MB}
+  # Render framework-raised errors (ResponseStatusException reasons, 404s, method
+  # mismatches) as RFC 7807 problem details — the one error shape the frontend's
+  # ApiError parser understands (see shared/web/ApiExceptionHandler for the
+  # cross-cutting custom mappings).
+  mvc:
+    problemdetails:
+      enabled: true
   modulith:
     runtime:
       verification-enabled: true

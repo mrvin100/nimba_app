@@ -2,6 +2,7 @@ package com.nimba.identity.internal
 
 import com.nimba.identity.AccountStatus
 import com.nimba.shared.CurrentUser
+import com.nimba.shared.getOrThrow
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
@@ -50,7 +51,7 @@ class AdminUserService(
         if (status != AccountStatus.ACTIVE && id == currentUser.id()) {
             throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Vous ne pouvez pas suspendre ou révoquer votre propre compte")
         }
-        val user = users.findById(id).orElseThrow { notFound() }
+        val user = users.getOrThrow(id, USER_NOT_FOUND)
         user.status = status
         return user.toAdminResponse()
     }
@@ -60,12 +61,14 @@ class AdminUserService(
         id: UUID,
         request: UpdateMembershipsRequest,
     ): AdminUserResponse {
-        val user = users.findById(id).orElseThrow { notFound() }
+        val user = users.getOrThrow(id, USER_NOT_FOUND)
         user.platformAdmin = request.admin
         user.memberships.clear()
         request.memberships.forEach { user.assign(it.department, it.role) }
         return user.toAdminResponse()
     }
 
-    private fun notFound() = ResponseStatusException(HttpStatus.NOT_FOUND, "Utilisateur introuvable")
+    companion object {
+        private const val USER_NOT_FOUND = "Utilisateur introuvable"
+    }
 }

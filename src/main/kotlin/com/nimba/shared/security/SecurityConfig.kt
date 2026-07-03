@@ -107,6 +107,10 @@ class SecurityConfig(
                 it.requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**").permitAll()
                 // Admin user-management is restricted to platform administrators.
                 it.requestMatchers("$base/admin/**").hasRole("ADMIN")
+                // The credit-case business surface (dossiers and their nested
+                // amortization-schedule / trades endpoints) belongs to the DRI
+                // direction. The role hierarchy lets a DRI manager pass this check.
+                it.requestMatchers("$base/credit-cases/**").hasRole("DRI_MEMBER")
                 it.anyRequest().authenticated()
             }.exceptionHandling { it.authenticationEntryPoint(HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)) }
             // A dedicated REST endpoint (`/auth/logout`) handles logout, so the
