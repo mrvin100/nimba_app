@@ -7,6 +7,7 @@ import com.nimba.identity.OrganizationLogo
 import org.apache.poi.util.Units
 import org.apache.poi.xwpf.usermodel.BreakType
 import org.apache.poi.xwpf.usermodel.Document
+import org.apache.poi.xwpf.usermodel.LineSpacingRule
 import org.apache.poi.xwpf.usermodel.ParagraphAlignment
 import org.apache.poi.xwpf.usermodel.TableRowAlign
 import org.apache.poi.xwpf.usermodel.XWPFDocument
@@ -14,6 +15,7 @@ import org.apache.poi.xwpf.usermodel.XWPFParagraph
 import org.apache.poi.xwpf.usermodel.XWPFRun
 import org.apache.poi.xwpf.usermodel.XWPFTable
 import org.apache.poi.xwpf.usermodel.XWPFTableCell
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTStyles
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.STTabJc
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
@@ -90,6 +92,7 @@ class TradeDocxExportService(
 
         val document = XWPFDocument()
         configureA4(document)
+        configureTypography(document)
         active.forEachIndexed { index, trade ->
             renderTraite(document, trade, case.clientName, case.currency, accountNumber, issueDate, logo)
             if (index < active.size - 1) {
@@ -123,6 +126,27 @@ class TradeDocxExportService(
             left = BigInteger.valueOf(MARGIN_HORIZONTAL_TWIPS)
             right = BigInteger.valueOf(MARGIN_HORIZONTAL_TWIPS)
         }
+    }
+
+    /**
+     * Document-wide default run properties. Critical for the vertical budget: the
+     * PARAGRAPH MARK ending every paragraph renders with the document defaults —
+     * Calibri 12 when none are declared — and a 12 pt mark stretches every line
+     * to ~15 pt however small the visible runs are, which alone pushes the third
+     * traité off the page. Declaring the traité's own type as the default keeps
+     * each line at the height actually printed.
+     */
+    private fun configureTypography(document: XWPFDocument) {
+        val ctStyles = CTStyles.Factory.newInstance()
+        val runDefaults = ctStyles.addNewDocDefaults().addNewRPrDefault().addNewRPr()
+        runDefaults.addNewRFonts().apply {
+            ascii = DEFAULT_FONT
+            hAnsi = DEFAULT_FONT
+            cs = DEFAULT_FONT
+        }
+        runDefaults.addNewSz().`val` = BigInteger.valueOf(FONT_SIZE_PT * 2L)
+        runDefaults.addNewSzCs().`val` = BigInteger.valueOf(FONT_SIZE_PT * 2L)
+        document.createStyles().setStyles(ctStyles)
     }
 
     /** One traité = one bordered single-cell table that never splits across pages. */
@@ -282,7 +306,11 @@ class TradeDocxExportService(
     private fun paragraph(cell: XWPFTableCell): XWPFParagraph = cell.addParagraph().also { it.spacingAfter = 0 }
 
     private fun blank(cell: XWPFTableCell) {
-        run(paragraph(cell), " ", size = BLANK_FONT_SIZE_PT)
+        val paragraph = paragraph(cell)
+        // A thin visual gap needs an EXACT line rule: left to auto, the paragraph
+        // mark dictates a full text line for what should be a few points.
+        paragraph.setSpacingBetween(BLANK_LINE_EXACT_PT, LineSpacingRule.EXACT)
+        run(paragraph, " ", size = BLANK_FONT_SIZE_PT)
     }
 
     /** Compact paragraph between two traités; closes the page after each group of three. */
@@ -291,6 +319,7 @@ class TradeDocxExportService(
         pageBreak: Boolean,
     ) {
         val paragraph = document.createParagraph().also { it.spacingAfter = 0 }
+        paragraph.setSpacingBetween(BLANK_LINE_EXACT_PT, LineSpacingRule.EXACT)
         val separatorRun = paragraph.createRun().apply { fontSize = BLANK_FONT_SIZE_PT }
         if (pageBreak) separatorRun.addBreak(BreakType.PAGE)
     }
@@ -353,6 +382,9 @@ class TradeDocxExportService(
          */
         const val FONT_SIZE_PT = 9
         const val BLANK_FONT_SIZE_PT = 4
+
+        /** Exact height of the thin gap paragraphs (blank lines, separators). */
+        const val BLANK_LINE_EXACT_PT = 5.0
 
         /** Two lines of this size ≈ 0.9 cm of signature room per traité. */
         const val SIGNATURE_LINE_FONT_SIZE_PT = 10

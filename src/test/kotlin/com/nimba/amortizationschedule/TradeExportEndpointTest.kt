@@ -22,6 +22,8 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.nio.file.Files
+import java.nio.file.Path
 import java.util.UUID
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -128,6 +130,12 @@ class TradeExportEndpointTest(
         assertContains(response.headers().firstValue("Content-Type").orElse(""), "wordprocessingml")
         val body = response.body()
         assertTrue(body.size > 1000, "the .docx should contain the traités")
+
+        // Keep the produced document as a build artifact: the print layout (three
+        // traités per A4 page) can only be judged in a renderer, so any layout
+        // change is inspected from build/test-artifacts after this test runs.
+        Files.createDirectories(Path.of("build/test-artifacts"))
+        Files.write(Path.of("build/test-artifacts/traites-export.docx"), body)
 
         // Open the document and check the rendered traités themselves.
         val text =
