@@ -15,8 +15,14 @@ import java.util.UUID
 interface CreditCaseModuleApi {
     fun createCase(command: CreateCreditCaseCommand): CreditCaseInfo
 
-    /** Pages through all cases (the dashboard list). */
-    fun list(pageable: Pageable): Page<CreditCaseInfo>
+    /**
+     * Pages through the cases (the dashboard list). [archived] narrows to archived
+     * (true) or active (false) cases; null returns everything.
+     */
+    fun list(
+        pageable: Pageable,
+        archived: Boolean? = null,
+    ): Page<CreditCaseInfo>
 
     /** Updates a case's general information (client, product, currency); 404 if unknown. */
     fun updateCase(
@@ -30,6 +36,19 @@ interface CreditCaseModuleApi {
 
     /** Flips the case status to TRADES_GENERES once trades have been generated for it. */
     fun markTradesGenerated(creditCaseId: UUID)
+
+    /** Archives a case (hidden from the active list, nothing destroyed); 404 if unknown. */
+    fun archive(id: UUID): CreditCaseInfo
+
+    /** Puts an archived case back into the active list; 404 if unknown. */
+    fun unarchive(id: UUID): CreditCaseInfo
+
+    /**
+     * Definitively deletes a case and publishes [CreditCaseDeleted] in the same
+     * transaction, so dependent modules purge their attached data atomically.
+     * 404 if unknown.
+     */
+    fun delete(id: UUID)
 }
 
 /**

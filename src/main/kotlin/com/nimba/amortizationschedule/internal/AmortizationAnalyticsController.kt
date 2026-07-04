@@ -34,6 +34,7 @@ class AmortizationAnalyticsController(
         @RequestParam(required = false) status: PaymentStatus?,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "25") size: Int,
+        @RequestParam(defaultValue = "PERIODE") sortBy: TableSortField,
         @RequestParam(defaultValue = "asc") sort: String,
     ): PageResponse<AmortizationTableRow> =
         analytics.table(
@@ -41,6 +42,7 @@ class AmortizationAnalyticsController(
             status = status,
             page = page.coerceAtLeast(0),
             size = size.coerceIn(1, 100),
+            sortBy = sortBy,
             descending = sort.equals("desc", ignoreCase = true),
         )
 }

@@ -12,4 +12,7 @@ interface TradeRepository : JpaRepository<Trade, UUID> {
 
     /** All trades for a case, active and superseded — the full generation history. */
     fun findByCreditCaseId(creditCaseId: UUID): List<Trade>
+
+    /** Purges every generation of a deleted case (superseded ones included). */
+    fun deleteByCreditCaseId(creditCaseId: UUID)
 }

@@ -19,4 +19,6 @@ data class CreditCaseInfo(
     val createdAt: Instant,
     /** The client's account number at the bank; null until captured on the case. */
     val accountNumber: String? = null,
+    /** When an administrator archived the case; null while it is active. */
+    val archivedAt: Instant? = null,
 )

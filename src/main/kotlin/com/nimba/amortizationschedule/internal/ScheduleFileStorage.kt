@@ -32,4 +32,13 @@ class ScheduleFileStorage(
         Files.write(target, bytes)
         return target.toString()
     }
+
+    /** Removes every retained file of a case (called when the case is deleted). */
+    fun deleteAll(creditCaseId: UUID) {
+        val root = Path.of(properties.amortizationScheduleDir, creditCaseId.toString())
+        if (!Files.exists(root)) return
+        Files.walk(root).use { paths ->
+            paths.sorted(Comparator.reverseOrder()).forEach(Files::deleteIfExists)
+        }
+    }
 }

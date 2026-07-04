@@ -1,5 +1,6 @@
 package com.nimba.amortizationschedule.internal
 
+import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
@@ -8,8 +9,10 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
+import java.time.LocalDate
 import java.util.UUID
 
 /**
@@ -51,8 +54,11 @@ class TradeGenerationController(
     @GetMapping("/export/docx")
     fun exportDocx(
         @PathVariable caseId: UUID,
+        // Signature date printed on every traité's acceptance line; the analyst
+        // may pick it at download time, the download day being the default.
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) signatureDate: LocalDate?,
     ): ResponseEntity<ByteArray> {
-        val export = tradeDocxExport.export(caseId)
+        val export = tradeDocxExport.export(caseId, signatureDate)
         return ResponseEntity
             .ok()
             .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"${export.filename}\"")

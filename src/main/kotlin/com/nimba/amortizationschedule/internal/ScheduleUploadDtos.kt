@@ -19,6 +19,23 @@ data class UploadResponse(
     val fixedDayOfMonth: Int,
 )
 
+/**
+ * Current schedule state of a case: the latest uploaded version, plus whether the
+ * active trades were generated from THIS version ([tradesUpToDate] false right
+ * after an upload, or after a re-import supersedes the generated trades' source).
+ */
+data class LatestScheduleResponse(
+    val id: UUID,
+    val versionNumber: Int,
+    val originalFilename: String,
+    val uploadedAt: Instant,
+    val lineCount: Int,
+    val ordinaryOffsetMonths: Int,
+    val vrOffsetMonths: Int,
+    val fixedDayOfMonth: Int,
+    val tradesUpToDate: Boolean,
+)
+
 /** Body returned when an upload is rejected for parse/consistency errors (422). */
 data class UploadRejectedResponse(
     val valid: Boolean,

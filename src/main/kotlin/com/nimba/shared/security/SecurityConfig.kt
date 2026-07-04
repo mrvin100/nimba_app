@@ -107,6 +107,13 @@ class SecurityConfig(
                 it.requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**").permitAll()
                 // Admin user-management is restricted to platform administrators.
                 it.requestMatchers("$base/admin/**").hasRole("ADMIN")
+                // Administrative acts on a dossier (archive / restore / delete):
+                // matched BEFORE the general credit-cases rule so administrators
+                // reach exactly these paths and nothing else of the DRI surface.
+                // Method security (@PreAuthorize on the controller) enforces the
+                // same role a second time, closer to the code.
+                it.requestMatchers(HttpMethod.DELETE, "$base/credit-cases/*").hasRole("ADMIN")
+                it.requestMatchers("$base/credit-cases/*/archive", "$base/credit-cases/*/unarchive").hasRole("ADMIN")
                 // The credit-case business surface (dossiers and their nested
                 // amortization-schedule / trades endpoints) belongs to the DRI
                 // direction. The role hierarchy lets a DRI manager pass this check.

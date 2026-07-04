@@ -22,6 +22,8 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.nio.file.Files
+import java.nio.file.Path
 import java.util.UUID
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -129,6 +131,12 @@ class TradeExportEndpointTest(
         val body = response.body()
         assertTrue(body.size > 1000, "the .docx should contain the traités")
 
+        // Keep the produced document as a build artifact: the print layout (three
+        // traités per A4 page) can only be judged in a renderer, so any layout
+        // change is inspected from build/test-artifacts after this test runs.
+        Files.createDirectories(Path.of("build/test-artifacts"))
+        Files.write(Path.of("build/test-artifacts/traites-export.docx"), body)
+
         // Open the document and check the rendered traités themselves.
         val text =
             XWPFDocument(ByteArrayInputStream(body)).use { document ->
@@ -145,6 +153,23 @@ class TradeExportEndpointTest(
         // appear exactly once per traité, never doubled.
         assertContains(text, "Francs Guinéens")
         assertTrue(!text.contains("Francs Guinéens Francs Guinéens"), "currency wording must not be duplicated")
+
+        // The acceptance line accepts a signature date chosen at download time;
+        // it lands on every traité in the long French form.
+        val dated =
+            client.send(
+                HttpRequest
+                    .newBuilder(URI("${base(created.id)}/trades/export/docx?signatureDate=2026-01-15"))
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofByteArray(),
+            )
+        assertEquals(200, dated.statusCode())
+        val datedText =
+            XWPFDocument(ByteArrayInputStream(dated.body())).use { document ->
+                XWPFWordExtractor(document).use { it.text }
+            }
+        assertEquals(25, Regex(Regex.escape("le 15 Janvier 2026")).findAll(datedText).count())
     }
 
     @Test
