@@ -127,6 +127,12 @@ nimba:
     # Feature switch: when false, invitations are persisted but no e-mail is sent
     # (useful for tests and environments without an SMTP relay).
     enabled: ${MAIL_ENABLED:true}
+    # Fallback sender used until an admin sets the organisation's own sender on the
+    # org-settings screen. In production this MUST be an address on a domain
+    # verified with the mail provider (e.g. no-reply@contact.mrvin100.de), otherwise
+    # Resend rejects the message. Defaults to the non-routable dev placeholder.
+    from: ${MAIL_FROM:no-reply@nimba.local}
+    from-name: ${MAIL_FROM_NAME:Nimba}
     # Delivery transport: `smtp` (default) uses the spring.mail relay above
     # (local Mailpit); `resend` uses the Resend HTTPS API for hosts that block
     # outbound SMTP (Render, Fly). When `resend`, set nimba.mail.resend.api-key.

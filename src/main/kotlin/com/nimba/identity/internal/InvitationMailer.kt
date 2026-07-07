@@ -32,8 +32,14 @@ class InvitationMailer(
         val settings = organization.get()
         val link = "${appProperties.frontendBaseUrl.trimEnd('/')}/set-password?token=$token"
         try {
+            // Use the organisation's own sender once an admin has set one; until then
+            // fall back to the environment default (MAIL_FROM), which must be on a
+            // domain verified with the mail provider so the message is not rejected.
+            val configured = settings.senderEmail != OrganizationSettings.UNCONFIGURED_SENDER_EMAIL
+            val senderEmail = if (configured) settings.senderEmail else mailFeature.from
+            val senderName = if (configured) settings.senderName else mailFeature.fromName
             // Encode the sender's display name (accents survive both transports).
-            val from = InternetAddress(settings.senderEmail, settings.senderName, "UTF-8").toString()
+            val from = InternetAddress(senderEmail, senderName, "UTF-8").toString()
             val body =
                 """
                 Bonjour ${user.fullName},
@@ -45,7 +51,7 @@ class InvitationMailer(
 
                 Ce lien est valable ${appProperties.invitationTtl.toDays()} jours.
 
-                — ${settings.senderName}
+                — $senderName
                 """.trimIndent()
             emailTransport.send(from, user.email, "Votre accès à ${settings.organizationName}", body)
             log.info("Invitation e-mail sent to {}", user.email)
