@@ -149,11 +149,16 @@ nimba:
       api-key: ${RESEND_API_KEY:}
       base-url: ${RESEND_BASE_URL:https://api.resend.com}
   minio:
-    # Object storage for user avatars. Defaults target the docker-compose MinIO;
-    # credentials/bucket reuse the same MINIO_* variables as the container.
+    # S3-compatible object storage for avatars and the organisation logo. Defaults
+    # target the local docker-compose MinIO. The app authenticates with its OWN
+    # access/secret key (MINIO_ACCESS_KEY / MINIO_SECRET_KEY) — deliberately NOT the
+    # container's root user, so production can point at a hosted S3 (AWS S3,
+    # Cloudflare R2, hosted MinIO, …) by setting MINIO_ENDPOINT plus those keys,
+    # with no dependency on any local container. Locally the two keys match the
+    # container's MINIO_ROOT_USER / MINIO_ROOT_PASSWORD.
     endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
-    access-key: ${MINIO_ROOT_USER:nimba}
-    secret-key: ${MINIO_ROOT_PASSWORD:nimba-secret}
+    access-key: ${MINIO_ACCESS_KEY:nimba}
+    secret-key: ${MINIO_SECRET_KEY:nimba-secret}
     bucket: ${MINIO_BUCKET:nimba}
 
 storage:
