@@ -57,7 +57,10 @@ services:
   mailpit:
     image: axllent/mailpit:latest
     ports:
-      - "${MAILPIT_SMTP_PORT}:1025"
+      # SMTP port is the SAME MAIL_PORT the application connects to (see
+      # application.yaml), so the relay the container exposes and the relay the app
+      # dials cannot drift — the POSTGRES_PORT pattern applied to mail.
+      - "${MAIL_PORT}:1025"
       - "${MAILPIT_UI_PORT}:8025"
 
 volumes:
