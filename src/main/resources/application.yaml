@@ -118,7 +118,9 @@ auth:
 nimba:
   app:
     # Public base URL of the frontend, used to build the set-password link in
-    # invitation e-mails (e.g. {base}/set-password?token=...).
+    # invitation e-mails (e.g. {base}/set-password?token=...). Set
+    # APP_FRONTEND_BASE_URL to the deployed frontend (e.g. https://dmba.vercel.app)
+    # in staging/production; the localhost default is for local dev only.
     frontend-base-url: ${APP_FRONTEND_BASE_URL:http://localhost:3000}
     # How long an invitation / set-password token stays valid (ISO-8601 duration).
     invitation-ttl: ${INVITATION_TTL:P7D}
