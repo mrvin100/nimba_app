@@ -1,19 +1,20 @@
 package com.nimba.identity.internal
 
+import jakarta.mail.internet.InternetAddress
 import org.slf4j.LoggerFactory
-import org.springframework.mail.javamail.JavaMailSender
-import org.springframework.mail.javamail.MimeMessageHelper
 import org.springframework.stereotype.Component
 
 /**
  * Sends the invitation e-mail carrying the set-password link. The sender identity
- * comes from the organisation settings. Sending is best-effort: a relay failure is
- * logged and swallowed so it never rolls back the account/invitation creation (the
- * admin can always resend). Disabled entirely by `nimba.mail.enabled=false`.
+ * comes from the organisation settings. Delivery goes through the active
+ * [EmailTransport] (SMTP locally, Resend on hosts that block outbound SMTP).
+ * Sending is best-effort: a failure is logged and swallowed so it never rolls back
+ * the account/invitation creation (the admin can always resend). Disabled entirely
+ * by `nimba.mail.enabled=false`.
  */
 @Component
 class InvitationMailer(
-    private val mailSender: JavaMailSender,
+    private val emailTransport: EmailTransport,
     private val organization: OrganizationSettingsService,
     private val appProperties: AppProperties,
     private val mailFeature: MailFeatureProperties,
@@ -31,12 +32,9 @@ class InvitationMailer(
         val settings = organization.get()
         val link = "${appProperties.frontendBaseUrl.trimEnd('/')}/set-password?token=$token"
         try {
-            val message = mailSender.createMimeMessage()
-            val helper = MimeMessageHelper(message, false, "UTF-8")
-            helper.setFrom(settings.senderEmail, settings.senderName)
-            helper.setTo(user.email)
-            helper.setSubject("Votre accès à ${settings.organizationName}")
-            helper.setText(
+            // Encode the sender's display name (accents survive both transports).
+            val from = InternetAddress(settings.senderEmail, settings.senderName, "UTF-8").toString()
+            val body =
                 """
                 Bonjour ${user.fullName},
 
@@ -48,10 +46,8 @@ class InvitationMailer(
                 Ce lien est valable ${appProperties.invitationTtl.toDays()} jours.
 
                 — ${settings.senderName}
-                """.trimIndent(),
-                false,
-            )
-            mailSender.send(message)
+                """.trimIndent()
+            emailTransport.send(from, user.email, "Votre accès à ${settings.organizationName}", body)
             log.info("Invitation e-mail sent to {}", user.email)
         } catch (ex: Exception) {
             log.warn("Failed to send invitation e-mail to {}: {}", user.email, ex.message)

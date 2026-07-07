@@ -21,6 +21,9 @@ import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.authentication.HttpStatusEntryPoint
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository
 import org.springframework.security.web.context.SecurityContextRepository
+import org.springframework.web.cors.CorsConfiguration
+import org.springframework.web.cors.CorsConfigurationSource
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource
 
 /**
  * Session-cookie security. Authentication is established by `POST /auth/login`,
@@ -36,9 +39,31 @@ import org.springframework.security.web.context.SecurityContextRepository
 @EnableMethodSecurity
 class SecurityConfig(
     private val apiProperties: ApiProperties,
+    private val corsProperties: CorsProperties,
 ) {
     @Bean
     fun passwordEncoder(): PasswordEncoder = BCryptPasswordEncoder()
+
+    /**
+     * CORS for the browser frontend. Locally the frontend and API are same-origin,
+     * but in staging/production they are separate services (see [CorsProperties]),
+     * so the configured origins must be advertised. `allowCredentials` is true
+     * because authentication rides on the session cookie, which the browser only
+     * sends cross-origin when the server explicitly allows credentials.
+     */
+    @Bean
+    fun corsConfigurationSource(): CorsConfigurationSource {
+        val config =
+            CorsConfiguration().apply {
+                allowedOrigins = corsProperties.allowedOrigins
+                allowedMethods = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+                allowedHeaders = listOf("Authorization", "Content-Type", "X-Request-ID")
+                exposedHeaders = listOf("Location", "X-Request-ID")
+                allowCredentials = true
+                maxAge = 3600L
+            }
+        return UrlBasedCorsConfigurationSource().apply { registerCorsConfiguration("/**", config) }
+    }
 
     /**
      * Within each direction a MANAGER inherits MEMBER, so member-level checks pass
@@ -73,9 +98,13 @@ class SecurityConfig(
     fun securityFilterChain(
         http: HttpSecurity,
         securityContextRepository: SecurityContextRepository,
+        corsConfigurationSource: CorsConfigurationSource,
     ): SecurityFilterChain {
         val base = apiProperties.basePath
         http
+            // Advertise the configured frontend origin(s); needed once the frontend
+            // is deployed as a separate service (see CorsProperties).
+            .cors { it.configurationSource(corsConfigurationSource) }
             // The session cookie is SameSite=Strict and the API is consumed only by
             // the same-origin frontend, which blunts CSRF. A full CSRF posture is
             // re-evaluated in the pre-launch security review (NIMBA-30).

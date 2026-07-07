@@ -53,9 +53,11 @@ spring:
     runtime:
       verification-enabled: true
   mail:
-    # SMTP relay for invitation e-mails. Defaults target the local Mailpit
-    # container (docker-compose); set the real relay per environment. Sending
-    # failures never block account creation (the invitation is still persisted).
+    # SMTP relay for invitation e-mails (used by the `smtp` transport). Defaults
+    # target the local Mailpit container (docker-compose); set the real relay per
+    # environment. Sending failures never block account creation (the invitation
+    # is still persisted). Hosts that block outbound SMTP (Render) use the Resend
+    # HTTPS transport instead — see nimba.mail.transport below.
     host: ${MAIL_HOST:localhost}
     port: ${MAIL_PORT:1025}
     username: ${MAIL_USERNAME:}
@@ -116,10 +118,24 @@ nimba:
     frontend-base-url: ${APP_FRONTEND_BASE_URL:http://localhost:3000}
     # How long an invitation / set-password token stays valid (ISO-8601 duration).
     invitation-ttl: ${INVITATION_TTL:P7D}
+  cors:
+    # Browser origin(s) allowed to call the API. Locally the frontend is
+    # same-origin; in staging/production it is a separate service (e.g. on Render),
+    # so its public origin(s) must be listed here. Comma-separated for several.
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
   mail:
     # Feature switch: when false, invitations are persisted but no e-mail is sent
     # (useful for tests and environments without an SMTP relay).
     enabled: ${MAIL_ENABLED:true}
+    # Delivery transport: `smtp` (default) uses the spring.mail relay above
+    # (local Mailpit); `resend` uses the Resend HTTPS API for hosts that block
+    # outbound SMTP (Render, Fly). When `resend`, set nimba.mail.resend.api-key.
+    transport: ${MAIL_TRANSPORT:smtp}
+    resend:
+      # Resend API key (secret) and base URL. Only read when transport=resend; the
+      # organisation's sender e-mail must be on a domain verified in Resend.
+      api-key: ${RESEND_API_KEY:}
+      base-url: ${RESEND_BASE_URL:https://api.resend.com}
   minio:
     # Object storage for user avatars. Defaults target the docker-compose MinIO;
     # credentials/bucket reuse the same MINIO_* variables as the container.
