@@ -74,12 +74,16 @@ spring:
   flyway:
     enabled: true
   datasource:
-    # The POSTGRES_* variables are the SAME ones docker-compose.yml uses, so the
-    # database the container creates and the database the app connects to cannot
-    # drift. Defaults make a fresh clone run with zero configuration; override the
-    # variables (host, credentials) for staging and production, which run on the
-    # bank's internal infrastructure (on-premise, mono-tenant — see NIMBA-5).
-    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5433}/${POSTGRES_DB:nimba}
+    # Local/dev: the URL is built from the POSTGRES_* variables — the SAME ones
+    # docker-compose.yml uses, so the database the container creates and the one the
+    # app connects to cannot drift. Defaults make a fresh clone run with zero config.
+    #
+    # Managed Postgres (Neon on Render, etc.) gives you a single ready-made JDBC
+    # connection string; set DATABASE_URL to that whole string and it is used
+    # verbatim (do NOT split it into POSTGRES_HOST/PORT). Credentials still come from
+    # POSTGRES_USER/POSTGRES_PASSWORD. Example DATABASE_URL:
+    #   jdbc:postgresql://ep-xxx-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require
+    url: ${DATABASE_URL:jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5433}/${POSTGRES_DB:nimba}}
     username: ${POSTGRES_USER:nimba}
     password: ${POSTGRES_PASSWORD:nimba}
     hikari:
