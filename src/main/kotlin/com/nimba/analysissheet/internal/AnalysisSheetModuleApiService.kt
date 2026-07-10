@@ -71,6 +71,16 @@ class AnalysisSheetModuleApiService(
         return sheet.toInfo()
     }
 
+    @Transactional
+    override fun reopen(creditCaseId: UUID) {
+        val sheet = sheets.findByCreditCaseId(creditCaseId) ?: return
+        if (sheet.status == AnalysisSheetStatus.PUBLISHED) {
+            sheet.status = AnalysisSheetStatus.DRAFT
+            sheet.publishedAt = null
+            sheet.updatedAt = Instant.now()
+        }
+    }
+
     private fun requireDraft(creditCaseId: UUID): AnalysisSheet {
         val sheet =
             sheets.findByCreditCaseId(creditCaseId)

@@ -12,6 +12,12 @@ import java.util.UUID
 interface IdentityModuleApi {
     fun findUser(userId: UUID): UserInfo?
 
+    /**
+     * The directions a user belongs to (any role). The workflow module uses this to
+     * check an actor may act on a dossier at its current review stage.
+     */
+    fun departmentsOf(userId: UUID): Set<Department>
+
     /** The configured organisation logo, or null when none has been uploaded. */
     fun organizationLogo(): OrganizationLogo?
 }

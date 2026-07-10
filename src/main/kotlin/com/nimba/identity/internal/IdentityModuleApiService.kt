@@ -1,5 +1,6 @@
 package com.nimba.identity.internal
 
+import com.nimba.identity.Department
 import com.nimba.identity.IdentityModuleApi
 import com.nimba.identity.OrganizationLogo
 import com.nimba.identity.UserInfo
@@ -14,6 +15,10 @@ class IdentityModuleApiService(
 ) : IdentityModuleApi {
     @Transactional(readOnly = true)
     override fun findUser(userId: UUID): UserInfo? = users.findById(userId).map { it.toUserInfo() }.orElse(null)
+
+    @Transactional(readOnly = true)
+    override fun departmentsOf(userId: UUID): Set<Department> =
+        users.findById(userId).map { user -> user.memberships.map { it.department }.toSet() }.orElse(emptySet())
 
     @Transactional(readOnly = true)
     override fun organizationLogo(): OrganizationLogo? = logos.find()?.let { OrganizationLogo(it.bytes, it.contentType) }

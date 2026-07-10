@@ -3,6 +3,7 @@ package com.nimba.creditcase.internal
 import com.nimba.creditcase.CaseTypePolicies
 import com.nimba.creditcase.ContractType
 import com.nimba.creditcase.CreateCreditCaseCommand
+import com.nimba.creditcase.CreditCaseCreated
 import com.nimba.creditcase.CreditCaseDeleted
 import com.nimba.creditcase.CreditCaseInfo
 import com.nimba.creditcase.CreditCaseModuleApi
@@ -48,6 +49,9 @@ class CreditCaseModuleApiService(
                     accountNumber = command.accountNumber?.takeIf { it.isNotBlank() },
                 ),
             )
+        // Let the workflow module initialise the dossier's lifecycle in the same
+        // transaction; the creditcase module stays unaware of who consumes this.
+        events.publishEvent(CreditCaseCreated(requireNotNull(saved.id)))
         return saved.toCreditCaseInfo()
     }
 

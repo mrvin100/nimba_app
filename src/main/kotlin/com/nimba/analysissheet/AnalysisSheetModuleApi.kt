@@ -21,4 +21,11 @@ interface AnalysisSheetModuleApi {
 
     /** Locks the FA. 409 if already PUBLISHED. */
     fun publish(creditCaseId: UUID): AnalysisSheetInfo
+
+    /**
+     * Reopens a published FA for editing (PUBLISHED → DRAFT), called by the workflow
+     * module when a dossier is returned to the DRI for changes. A no-op when the case
+     * has no FA or it is already a draft.
+     */
+    fun reopen(creditCaseId: UUID)
 }
