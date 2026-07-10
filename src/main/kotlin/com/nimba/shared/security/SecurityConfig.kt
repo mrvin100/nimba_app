@@ -78,6 +78,7 @@ class SecurityConfig(
             ROLE_DRI_MANAGER > ROLE_DRI_MEMBER
             ROLE_DCM_MANAGER > ROLE_DCM_MEMBER
             ROLE_DRC_MANAGER > ROLE_DRC_MEMBER
+            ROLE_COMITE_MANAGER > ROLE_COMITE_MEMBER
             """.trimIndent(),
         )
 

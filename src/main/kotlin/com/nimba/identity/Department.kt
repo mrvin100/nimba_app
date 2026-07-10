@@ -10,4 +10,5 @@ enum class Department {
     DRI,
     DCM,
     DRC,
+    COMITE,
 }
