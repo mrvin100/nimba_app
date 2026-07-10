@@ -29,6 +29,26 @@ fun seedDriAnalyst(
     )
 
 /**
+ * Seeds (idempotently) an active member of an arbitrary direction — used by the
+ * workflow tests to provision DCM / DRC / COMITE reviewers alongside the DRI.
+ */
+fun seedMember(
+    users: UserRepository,
+    passwordEncoder: PasswordEncoder,
+    email: String,
+    department: Department,
+    role: DepartmentRole = DepartmentRole.MEMBER,
+    fullName: String = "Membre $email",
+): User =
+    users.findByEmail(email) ?: users.saveAndFlush(
+        User(
+            fullName = fullName,
+            email = email,
+            passwordHash = requireNotNull(passwordEncoder.encode(TEST_PASSWORD)),
+        ).apply { assign(department, role) },
+    )
+
+/**
  * Seeds (idempotently) an active platform administrator — the profile the
  * administrative dossier actions (archive / restore / delete) require. No
  * direction membership: an admin manages the platform, not a direction's

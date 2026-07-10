@@ -41,6 +41,13 @@ class SecurityConfig(
     private val apiProperties: ApiProperties,
     private val corsProperties: CorsProperties,
 ) {
+    private companion object {
+        // The directions that participate in a dossier's review flow; a manager passes
+        // these via the role hierarchy. Used to open dossier reads and the workflow
+        // surface to every reviewer while keeping constitution DRI-only.
+        val REVIEW_ROLES = arrayOf("DRI_MEMBER", "DCM_MEMBER", "DRC_MEMBER", "COMITE_MEMBER")
+    }
+
     @Bean
     fun passwordEncoder(): PasswordEncoder = BCryptPasswordEncoder()
 
@@ -78,6 +85,7 @@ class SecurityConfig(
             ROLE_DRI_MANAGER > ROLE_DRI_MEMBER
             ROLE_DCM_MANAGER > ROLE_DCM_MEMBER
             ROLE_DRC_MANAGER > ROLE_DRC_MEMBER
+            ROLE_COMITE_MANAGER > ROLE_COMITE_MEMBER
             """.trimIndent(),
         )
 
@@ -143,9 +151,19 @@ class SecurityConfig(
                 // same role a second time, closer to the code.
                 it.requestMatchers(HttpMethod.DELETE, "$base/credit-cases/*").hasRole("ADMIN")
                 it.requestMatchers("$base/credit-cases/*/archive", "$base/credit-cases/*/unarchive").hasRole("ADMIN")
-                // The credit-case business surface (dossiers and their nested
-                // amortization-schedule / trades endpoints) belongs to the DRI
-                // direction. The role hierarchy lets a DRI manager pass this check.
+                // Workflow surface: reviewing a dossier crosses directions, so the
+                // transition and queue endpoints are open to every review direction;
+                // the workflow service enforces which direction may act at each stage.
+                // Matched before the DRI-only rule so a DCM/DRC/COMITE reviewer can post
+                // an action on a dossier that otherwise belongs to the DRI surface.
+                it.requestMatchers("$base/credit-cases/*/workflow/**", "$base/workflow/**").hasAnyRole(*REVIEW_ROLES)
+                // Reading a dossier and its documents is open to every review direction
+                // (reviewers must see the TA, FA and timeline they are judging). Only
+                // the DRI mutates the dossier's constitution.
+                it.requestMatchers(HttpMethod.GET, "$base/credit-cases/**").hasAnyRole(*REVIEW_ROLES)
+                // Constituting the dossier (create/update, TA upload, FA edit/publish,
+                // trade generation) belongs to the DRI direction. The role hierarchy
+                // lets a DRI manager pass this check.
                 it.requestMatchers("$base/credit-cases/**").hasRole("DRI_MEMBER")
                 it.anyRequest().authenticated()
             }.exceptionHandling { it.authenticationEntryPoint(HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)) }
