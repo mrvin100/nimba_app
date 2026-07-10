@@ -1,6 +1,7 @@
 package com.nimba.creditcase.internal
 
 import com.nimba.creditcase.CaseTypePolicies
+import com.nimba.creditcase.ClientIdentityInfo
 import com.nimba.creditcase.ContractType
 import com.nimba.creditcase.CreateCreditCaseCommand
 import com.nimba.creditcase.CreditCaseCreated
@@ -9,6 +10,7 @@ import com.nimba.creditcase.CreditCaseInfo
 import com.nimba.creditcase.CreditCaseModuleApi
 import com.nimba.creditcase.CreditCaseStatus
 import com.nimba.creditcase.ProductType
+import com.nimba.creditcase.UpdateClientIdentityCommand
 import com.nimba.creditcase.UpdateCreditCaseCommand
 import com.nimba.identity.IdentityModuleApi
 import com.nimba.shared.getOrThrow
@@ -66,6 +68,17 @@ class CreditCaseModuleApiService(
         case.contractType = requireValidContractType(command.productType, command.contractType)
         case.currency = command.currency
         case.accountNumber = command.accountNumber?.takeIf { it.isNotBlank() }
+        case.updatedAt = Instant.now()
+        return case.toCreditCaseInfo()
+    }
+
+    @Transactional
+    override fun updateIdentity(
+        id: UUID,
+        command: UpdateClientIdentityCommand,
+    ): CreditCaseInfo {
+        val case = creditCases.getOrThrow(id, "Dossier introuvable")
+        case.clientIdentity = command.toClientIdentity()
         case.updatedAt = Instant.now()
         return case.toCreditCaseInfo()
     }
@@ -159,4 +172,39 @@ internal fun CreditCase.toCreditCaseInfo(): CreditCaseInfo =
         createdAt = createdAt,
         accountNumber = accountNumber,
         archivedAt = archivedAt,
+        clientIdentity = identityOrEmpty().toInfo(),
+    )
+
+private fun ClientIdentity.toInfo(): ClientIdentityInfo =
+    ClientIdentityInfo(
+        formeJuridique = formeJuridique,
+        dateCreation = dateCreation,
+        adressePhysique = adressePhysique,
+        activiteDeBase = activiteDeBase,
+        codeNif = codeNif,
+        principalDirigeant = principalDirigeant,
+        dateEntreeRelation = dateEntreeRelation,
+        dateDerniereVisite = dateDerniereVisite,
+        agence = agence,
+        gestionnaire = gestionnaire,
+        analyste = analyste,
+        cotationPrecedente = cotationPrecedente,
+        cotationActuelle = cotationActuelle,
+    )
+
+private fun UpdateClientIdentityCommand.toClientIdentity(): ClientIdentity =
+    ClientIdentity(
+        formeJuridique = formeJuridique?.takeIf { it.isNotBlank() },
+        dateCreation = dateCreation,
+        adressePhysique = adressePhysique?.takeIf { it.isNotBlank() },
+        activiteDeBase = activiteDeBase?.takeIf { it.isNotBlank() },
+        codeNif = codeNif?.takeIf { it.isNotBlank() },
+        principalDirigeant = principalDirigeant?.takeIf { it.isNotBlank() },
+        dateEntreeRelation = dateEntreeRelation,
+        dateDerniereVisite = dateDerniereVisite,
+        agence = agence?.takeIf { it.isNotBlank() },
+        gestionnaire = gestionnaire?.takeIf { it.isNotBlank() },
+        analyste = analyste?.takeIf { it.isNotBlank() },
+        cotationPrecedente = cotationPrecedente?.takeIf { it.isNotBlank() },
+        cotationActuelle = cotationActuelle?.takeIf { it.isNotBlank() },
     )

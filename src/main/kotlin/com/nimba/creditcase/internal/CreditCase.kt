@@ -4,6 +4,7 @@ import com.nimba.creditcase.ContractType
 import com.nimba.creditcase.CreditCaseStatus
 import com.nimba.creditcase.ProductType
 import jakarta.persistence.Column
+import jakarta.persistence.Embedded
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
@@ -60,4 +61,17 @@ class CreditCase(
     /** When an administrator archived the case; null while it is active. */
     @Column(name = "archived_at")
     var archivedAt: Instant? = null
+
+    /**
+     * Descriptive client detail reused across the FA/PV/FMP; see [ClientIdentity].
+     * Nullable because Hibernate reloads an `@Embedded` value object as null (not an
+     * empty instance) once every one of its columns is null — true for every case
+     * until the DRI captures the first identity field. Read through
+     * [CreditCase.identityOrEmpty], never this property directly.
+     */
+    @Embedded
+    var clientIdentity: ClientIdentity? = ClientIdentity()
 }
+
+/** [CreditCase.clientIdentity], defaulting the "nothing captured yet" case to an empty value object. */
+internal fun CreditCase.identityOrEmpty(): ClientIdentity = clientIdentity ?: ClientIdentity()

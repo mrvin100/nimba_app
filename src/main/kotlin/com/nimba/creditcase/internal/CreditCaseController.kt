@@ -71,6 +71,12 @@ class CreditCaseController(
         @PathVariable id: UUID,
     ): CreditCaseResponse = creditCases.getOrThrow(id).toResponse()
 
+    @PutMapping("/{id}/identity")
+    fun updateIdentity(
+        @PathVariable id: UUID,
+        @Valid @RequestBody request: ClientIdentityRequest,
+    ): CreditCaseResponse = creditCases.updateIdentity(id, request.toCommand()).toResponse()
+
     @GetMapping
     fun list(
         @PageableDefault(size = 20, sort = ["createdAt"], direction = Sort.Direction.DESC) pageable: Pageable,
