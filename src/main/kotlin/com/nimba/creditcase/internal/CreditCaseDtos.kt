@@ -1,5 +1,6 @@
 package com.nimba.creditcase.internal
 
+import com.nimba.creditcase.ContractType
 import com.nimba.creditcase.CreditCaseInfo
 import com.nimba.creditcase.CreditCaseStatus
 import com.nimba.creditcase.ProductType
@@ -22,6 +23,8 @@ data class CreditCaseWriteRequest(
     val clientName: String,
     @field:NotNull
     val productType: ProductType,
+    /** Required when [productType] is LEASING; must be omitted otherwise (service-validated). */
+    val contractType: ContractType? = null,
     @field:NotBlank
     @field:Pattern(regexp = "[A-Z]{3}", message = "La devise doit être un code à 3 lettres majuscules (ex. GNF)")
     val currency: String,
@@ -34,6 +37,7 @@ data class CreditCaseResponse(
     val caseNumber: String,
     val clientName: String,
     val productType: ProductType,
+    val contractType: ContractType?,
     val currency: String,
     val status: CreditCaseStatus,
     val createdAt: Instant,
@@ -47,6 +51,7 @@ internal fun CreditCaseInfo.toResponse(): CreditCaseResponse =
         caseNumber = caseNumber,
         clientName = clientName,
         productType = productType,
+        contractType = contractType,
         currency = currency,
         status = status,
         createdAt = createdAt,
@@ -60,6 +65,7 @@ data class CreditCaseSummaryResponse(
     val caseNumber: String,
     val clientName: String,
     val productType: ProductType,
+    val contractType: ContractType?,
     val status: CreditCaseStatus,
     val createdAt: Instant,
     val archivedAt: Instant?,
@@ -71,6 +77,7 @@ internal fun CreditCaseInfo.toSummaryResponse(): CreditCaseSummaryResponse =
         caseNumber = caseNumber,
         clientName = clientName,
         productType = productType,
+        contractType = contractType,
         status = status,
         createdAt = createdAt,
         archivedAt = archivedAt,

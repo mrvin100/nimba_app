@@ -1,5 +1,6 @@
 package com.nimba.creditcase.internal
 
+import com.nimba.creditcase.ContractType
 import com.nimba.creditcase.CreditCaseStatus
 import com.nimba.creditcase.ProductType
 import jakarta.persistence.Column
@@ -30,6 +31,10 @@ class CreditCase(
     @Enumerated(EnumType.STRING)
     @Column(name = "product_type", nullable = false)
     var productType: ProductType,
+    /** Only set when [productType] is LEASING; null for every other product. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "contract_type")
+    var contractType: ContractType? = null,
     @Column(name = "currency", nullable = false)
     var currency: String,
     @Column(name = "created_by", nullable = false, updatable = false)

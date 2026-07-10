@@ -1,6 +1,7 @@
 package com.nimba.amortizationschedule
 
 import com.nimba.TestcontainersConfiguration
+import com.nimba.creditcase.ContractType
 import com.nimba.creditcase.CreateCreditCaseCommand
 import com.nimba.creditcase.CreditCaseModuleApi
 import com.nimba.creditcase.ProductType
@@ -92,7 +93,11 @@ class ViewActiveTradesTest(
     @Test
     fun `returns an empty list when no trades have been generated`() {
         val client = authenticatedClient()
-        val caseId = creditCases.createCase(CreateCreditCaseCommand("Vide", ProductType.LEASING, "GNF", analystId())).id
+        val caseId =
+            creditCases
+                .createCase(
+                    CreateCreditCaseCommand("Vide", ProductType.LEASING, "GNF", analystId(), contractType = ContractType.AVEC_CONTRAT),
+                ).id
 
         val response = list(client, caseId)
 
@@ -103,7 +108,17 @@ class ViewActiveTradesTest(
     @Test
     fun `returns only the latest generation after a regeneration`() {
         val client = authenticatedClient()
-        val caseId = creditCases.createCase(CreateCreditCaseCommand("ETS OC ET FRERES", ProductType.LEASING, "GNF", analystId())).id
+        val caseId =
+            creditCases
+                .createCase(
+                    CreateCreditCaseCommand(
+                        "ETS OC ET FRERES",
+                        ProductType.LEASING,
+                        "GNF",
+                        analystId(),
+                        contractType = ContractType.AVEC_CONTRAT,
+                    ),
+                ).id
 
         uploadValid(client, caseId)
         generate(client, caseId)
@@ -119,7 +134,11 @@ class ViewActiveTradesTest(
     @Test
     fun `rejects consultation without an authenticated session`() {
         val anonymous = HttpClient.newBuilder().cookieHandler(CookieManager()).build()
-        val caseId = creditCases.createCase(CreateCreditCaseCommand("Anon", ProductType.LEASING, "GNF", analystId())).id
+        val caseId =
+            creditCases
+                .createCase(
+                    CreateCreditCaseCommand("Anon", ProductType.LEASING, "GNF", analystId(), contractType = ContractType.AVEC_CONTRAT),
+                ).id
 
         val response = list(anonymous, caseId)
 

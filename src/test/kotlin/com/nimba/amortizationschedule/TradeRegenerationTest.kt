@@ -3,6 +3,7 @@ package com.nimba.amortizationschedule
 import com.nimba.TestcontainersConfiguration
 import com.nimba.amortizationschedule.internal.AmortizationScheduleRepository
 import com.nimba.amortizationschedule.internal.TradeRepository
+import com.nimba.creditcase.ContractType
 import com.nimba.creditcase.CreateCreditCaseCommand
 import com.nimba.creditcase.CreditCaseModuleApi
 import com.nimba.creditcase.ProductType
@@ -101,7 +102,17 @@ class TradeRegenerationTest(
     @Test
     fun `regeneration on a new version supersedes the previous trades but keeps them`() {
         val client = authenticatedClient()
-        val caseId = creditCases.createCase(CreateCreditCaseCommand("ETS OC ET FRERES", ProductType.LEASING, "GNF", analystId())).id
+        val caseId =
+            creditCases
+                .createCase(
+                    CreateCreditCaseCommand(
+                        "ETS OC ET FRERES",
+                        ProductType.LEASING,
+                        "GNF",
+                        analystId(),
+                        contractType = ContractType.AVEC_CONTRAT,
+                    ),
+                ).id
 
         uploadValid(client, caseId)
         val v1Id = requireNotNull(schedules.findFirstByCreditCaseIdOrderByVersionNumberDesc(caseId)).id

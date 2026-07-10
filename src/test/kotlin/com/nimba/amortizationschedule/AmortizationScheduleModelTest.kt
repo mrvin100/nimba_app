@@ -15,6 +15,8 @@ import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 @Import(TestcontainersConfiguration::class)
 @SpringBootTest
@@ -66,5 +68,21 @@ class AmortizationScheduleModelTest(
         assertFailsWith<DataIntegrityViolationException> {
             schedules.saveAndFlush(schedule(caseId, 1))
         }
+    }
+
+    @Test
+    fun `reports schedule presence and a TA summary once uploaded`() {
+        val caseId = UUID.randomUUID()
+        assertFalse(moduleApi.hasScheduleForCase(caseId))
+        assertNull(moduleApi.scheduleSummary(caseId))
+
+        schedules.saveAndFlush(schedule(caseId, 1))
+
+        assertTrue(moduleApi.hasScheduleForCase(caseId))
+        val summary = moduleApi.scheduleSummary(caseId)
+        assertEquals(BigDecimal("504822507.0000"), summary?.loanAmount)
+        assertEquals(1, summary?.durationMonths)
+        assertEquals(LocalDate.of(2026, 5, 1), summary?.startDate)
+        assertEquals(LocalDate.of(2026, 5, 1), summary?.endDate)
     }
 }

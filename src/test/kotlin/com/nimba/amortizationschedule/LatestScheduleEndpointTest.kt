@@ -1,6 +1,7 @@
 package com.nimba.amortizationschedule
 
 import com.nimba.TestcontainersConfiguration
+import com.nimba.creditcase.ContractType
 import com.nimba.creditcase.CreateCreditCaseCommand
 import com.nimba.creditcase.CreditCaseModuleApi
 import com.nimba.creditcase.ProductType
@@ -94,7 +95,17 @@ class LatestScheduleEndpointTest(
     @Test
     fun `schedule state follows the upload, generate, re-import workflow`() {
         val client = authenticatedClient()
-        val caseId = creditCases.createCase(CreateCreditCaseCommand("État Échéancier", ProductType.LEASING, "GNF", analystId())).id
+        val caseId =
+            creditCases
+                .createCase(
+                    CreateCreditCaseCommand(
+                        "État Échéancier",
+                        ProductType.LEASING,
+                        "GNF",
+                        analystId(),
+                        contractType = ContractType.AVEC_CONTRAT,
+                    ),
+                ).id
 
         // Nothing imported yet: same 404 semantics as the analytics endpoints.
         assertEquals(404, latest(client, caseId).statusCode())

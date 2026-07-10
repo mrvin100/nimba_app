@@ -2,6 +2,7 @@ package com.nimba.amortizationschedule
 
 import com.nimba.TestcontainersConfiguration
 import com.nimba.amortizationschedule.internal.AmortizationScheduleRepository
+import com.nimba.creditcase.ContractType
 import com.nimba.creditcase.CreateCreditCaseCommand
 import com.nimba.creditcase.CreditCaseModuleApi
 import com.nimba.creditcase.ProductType
@@ -56,7 +57,10 @@ class ScheduleUploadEndpointTest(
     }
 
     private fun newCaseId(): UUID =
-        creditCases.createCase(CreateCreditCaseCommand("Client Upload", ProductType.LEASING, "GNF", analystId())).id
+        creditCases
+            .createCase(
+                CreateCreditCaseCommand("Client Upload", ProductType.LEASING, "GNF", analystId(), contractType = ContractType.AVEC_CONTRAT),
+            ).id
 
     private fun upload(
         client: HttpClient,

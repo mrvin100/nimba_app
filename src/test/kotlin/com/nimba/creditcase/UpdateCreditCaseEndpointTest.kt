@@ -59,10 +59,18 @@ class UpdateCreditCaseEndpointTest(
 
     @Test
     fun `updates the case general information, keeping its number`() {
-        val created = creditCases.createCase(CreateCreditCaseCommand("Ancien Client", ProductType.LEASING, "GNF", analystId()))
+        val created =
+            creditCases.createCase(
+                CreateCreditCaseCommand("Ancien Client", ProductType.LEASING, "GNF", analystId(), contractType = ContractType.AVEC_CONTRAT),
+            )
         val client = authenticatedClient()
 
-        val response = put(client, created.id.toString(), """{"clientName":"Nouveau Client","productType":"LEASING","currency":"USD"}""")
+        val response =
+            put(
+                client,
+                created.id.toString(),
+                """{"clientName":"Nouveau Client","productType":"LEASING","contractType":"AVEC_CONTRAT","currency":"USD"}""",
+            )
 
         assertEquals(200, response.statusCode(), response.body())
         assertContains(response.body(), "Nouveau Client")
@@ -84,7 +92,10 @@ class UpdateCreditCaseEndpointTest(
 
     @Test
     fun `rejects an invalid currency`() {
-        val created = creditCases.createCase(CreateCreditCaseCommand("Client", ProductType.LEASING, "GNF", analystId()))
+        val created =
+            creditCases.createCase(
+                CreateCreditCaseCommand("Client", ProductType.LEASING, "GNF", analystId(), contractType = ContractType.AVEC_CONTRAT),
+            )
 
         val response =
             put(authenticatedClient(), created.id.toString(), """{"clientName":"Client","productType":"LEASING","currency":"gnf"}""")
