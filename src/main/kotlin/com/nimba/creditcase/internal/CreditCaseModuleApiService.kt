@@ -1,5 +1,6 @@
 package com.nimba.creditcase.internal
 
+import com.nimba.creditcase.CaseTypePolicies
 import com.nimba.creditcase.ContractType
 import com.nimba.creditcase.CreateCreditCaseCommand
 import com.nimba.creditcase.CreditCaseDeleted
@@ -121,25 +122,25 @@ class CreditCaseModuleApiService(
 }
 
 /**
- * A contract type is required exactly when the product is LEASING (each of its two
- * sub-flavors has its own FA), and must be absent for every other product — MC2/MUFFA
- * carries no contract distinction.
+ * Validates the (productType, contractType) pair against [CaseTypePolicies] — the
+ * single source of truth for which combinations exist — and returns the contract
+ * type to persist. A contract type is required exactly when the product is LEASING
+ * (each of its two sub-flavors has its own FA) and must be absent for every other
+ * product; MC2/MUFFA carries no contract distinction.
  */
 private fun requireValidContractType(
     productType: ProductType,
     contractType: ContractType?,
-): ContractType? =
-    when (productType) {
-        ProductType.LEASING ->
-            contractType
-                ?: throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Le type de contrat est requis pour un dossier LEASING")
-        ProductType.MC2_MUFFA ->
-            if (contractType != null) {
-                throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Le type de contrat ne s'applique pas à un dossier MC2/MUFFA")
-            } else {
-                null
-            }
-    }
+): ContractType? {
+    if (CaseTypePolicies.find(productType, contractType) != null) return contractType
+    val message =
+        if (productType == ProductType.LEASING) {
+            "Le type de contrat est requis pour un dossier LEASING"
+        } else {
+            "Le type de contrat ne s'applique pas à un dossier ${productType.name.replace('_', '/')}"
+        }
+    throw ResponseStatusException(HttpStatus.BAD_REQUEST, message)
+}
 
 internal fun CreditCase.toCreditCaseInfo(): CreditCaseInfo =
     CreditCaseInfo(
