@@ -1,10 +1,12 @@
 package com.nimba.creditcase.internal
 
+import com.nimba.creditcase.ContractType
 import com.nimba.creditcase.CreateCreditCaseCommand
 import com.nimba.creditcase.CreditCaseDeleted
 import com.nimba.creditcase.CreditCaseInfo
 import com.nimba.creditcase.CreditCaseModuleApi
 import com.nimba.creditcase.CreditCaseStatus
+import com.nimba.creditcase.ProductType
 import com.nimba.creditcase.UpdateCreditCaseCommand
 import com.nimba.identity.IdentityModuleApi
 import com.nimba.shared.getOrThrow
@@ -31,6 +33,7 @@ class CreditCaseModuleApiService(
         // to a real user through the identity module's API (no direct entity access).
         identity.findUser(command.createdBy)
             ?: throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "Analyste inconnu")
+        val contractType = requireValidContractType(command.productType, command.contractType)
 
         val saved =
             creditCases.save(
@@ -38,6 +41,7 @@ class CreditCaseModuleApiService(
                     caseNumber = numberGenerator.nextCaseNumber(),
                     clientName = command.clientName,
                     productType = command.productType,
+                    contractType = contractType,
                     currency = command.currency,
                     createdBy = command.createdBy,
                     accountNumber = command.accountNumber?.takeIf { it.isNotBlank() },
@@ -54,6 +58,7 @@ class CreditCaseModuleApiService(
         val case = creditCases.getOrThrow(id, "Dossier introuvable")
         case.clientName = command.clientName
         case.productType = command.productType
+        case.contractType = requireValidContractType(command.productType, command.contractType)
         case.currency = command.currency
         case.accountNumber = command.accountNumber?.takeIf { it.isNotBlank() }
         case.updatedAt = Instant.now()
@@ -115,12 +120,34 @@ class CreditCaseModuleApiService(
     }
 }
 
+/**
+ * A contract type is required exactly when the product is LEASING (each of its two
+ * sub-flavors has its own FA), and must be absent for every other product — MC2/MUFFA
+ * carries no contract distinction.
+ */
+private fun requireValidContractType(
+    productType: ProductType,
+    contractType: ContractType?,
+): ContractType? =
+    when (productType) {
+        ProductType.LEASING ->
+            contractType
+                ?: throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Le type de contrat est requis pour un dossier LEASING")
+        ProductType.MC2_MUFFA ->
+            if (contractType != null) {
+                throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Le type de contrat ne s'applique pas à un dossier MC2/MUFFA")
+            } else {
+                null
+            }
+    }
+
 internal fun CreditCase.toCreditCaseInfo(): CreditCaseInfo =
     CreditCaseInfo(
         id = requireNotNull(id),
         caseNumber = caseNumber,
         clientName = clientName,
         productType = productType,
+        contractType = contractType,
         currency = currency,
         status = status,
         createdBy = createdBy,

@@ -58,7 +58,10 @@ class GetCreditCaseEndpointTest(
 
     @Test
     fun `returns the case by id with its status`() {
-        val created = creditCases.createCase(CreateCreditCaseCommand("Client Get", ProductType.LEASING, "GNF", analystId()))
+        val created =
+            creditCases.createCase(
+                CreateCreditCaseCommand("Client Get", ProductType.LEASING, "GNF", analystId(), contractType = ContractType.AVEC_CONTRAT),
+            )
         val client = authenticatedClient()
 
         val response = get(client, created.id.toString())

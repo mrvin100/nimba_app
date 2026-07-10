@@ -38,11 +38,11 @@ class CreditCaseModuleTest(
 
         val first =
             creditCases.createCase(
-                CreateCreditCaseCommand("Client A", ProductType.LEASING, "GNF", analyst),
+                CreateCreditCaseCommand("Client A", ProductType.LEASING, "GNF", analyst, contractType = ContractType.AVEC_CONTRAT),
             )
         val second =
             creditCases.createCase(
-                CreateCreditCaseCommand("Client B", ProductType.LEASING, "GNF", analyst),
+                CreateCreditCaseCommand("Client B", ProductType.LEASING, "GNF", analyst, contractType = ContractType.AVEC_CONTRAT),
             )
 
         assertTrue(first.caseNumber.matches(Regex("""DOS-\d{4}-\d{4}""")), "unexpected format: ${first.caseNumber}")
@@ -55,7 +55,7 @@ class CreditCaseModuleTest(
         val analyst = seedAnalyst()
         val created =
             creditCases.createCase(
-                CreateCreditCaseCommand("Client Résolu", ProductType.LEASING, "GNF", analyst),
+                CreateCreditCaseCommand("Client Résolu", ProductType.LEASING, "GNF", analyst, contractType = ContractType.AVEC_CONTRAT),
             )
 
         val byId = creditCases.findById(created.id)

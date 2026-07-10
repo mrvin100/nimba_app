@@ -56,7 +56,8 @@ class CreateCreditCaseEndpointTest(
                 request("/api/v1/credit-cases")
                     .POST(
                         json(
-                            """{"clientName":"ETS OC ET FRERES","productType":"LEASING","currency":"GNF","accountNumber":"0102386501-90"}""",
+                            """{"clientName":"ETS OC ET FRERES","productType":"LEASING","contractType":"AVEC_CONTRAT",""" +
+                                """"currency":"GNF","accountNumber":"0102386501-90"}""",
                         ),
                     ).build(),
                 HttpResponse.BodyHandlers.ofString(),
@@ -66,6 +67,56 @@ class CreateCreditCaseEndpointTest(
         assertContains(response.body(), "ETS OC ET FRERES")
         assertContains(response.body(), "0102386501-90")
         assertTrue(Regex("""DOS-\d{4}-\d{4}""").containsMatchIn(response.body()), "expected a case number; body=${response.body()}")
+    }
+
+    @Test
+    fun `creates an MC2_MUFFA case without a contract type`() {
+        val client = authenticatedClient()
+
+        val response =
+            client.send(
+                request("/api/v1/credit-cases")
+                    .POST(json("""{"clientName":"MC2 Client","productType":"MC2_MUFFA","currency":"GNF"}"""))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString(),
+            )
+
+        assertEquals(201, response.statusCode(), "body=${response.body()}")
+        assertContains(response.body(), "MC2_MUFFA")
+    }
+
+    @Test
+    fun `rejects a LEASING case without a contract type`() {
+        val client = authenticatedClient()
+
+        val response =
+            client.send(
+                request("/api/v1/credit-cases")
+                    .POST(json("""{"clientName":"Client Sans Type","productType":"LEASING","currency":"GNF"}"""))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString(),
+            )
+
+        assertEquals(400, response.statusCode())
+    }
+
+    @Test
+    fun `rejects an MC2_MUFFA case carrying a contract type`() {
+        val client = authenticatedClient()
+
+        val response =
+            client.send(
+                request("/api/v1/credit-cases")
+                    .POST(
+                        json(
+                            """{"clientName":"Client Incohérent","productType":"MC2_MUFFA","contractType":"AVEC_CONTRAT",""" +
+                                """"currency":"GNF"}""",
+                        ),
+                    ).build(),
+                HttpResponse.BodyHandlers.ofString(),
+            )
+
+        assertEquals(400, response.statusCode())
     }
 
     @Test

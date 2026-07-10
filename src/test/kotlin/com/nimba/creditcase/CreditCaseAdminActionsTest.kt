@@ -91,7 +91,10 @@ class CreditCaseAdminActionsTest(
     ): HttpResponse<String> = client.send(HttpRequest.newBuilder(URI(url(path))).DELETE().build(), HttpResponse.BodyHandlers.ofString())
 
     private fun newCase(name: String): UUID =
-        creditCases.createCase(CreateCreditCaseCommand(name, ProductType.LEASING, "GNF", analystId())).id
+        creditCases
+            .createCase(
+                CreateCreditCaseCommand(name, ProductType.LEASING, "GNF", analystId(), contractType = ContractType.AVEC_CONTRAT),
+            ).id
 
     private fun uploadSchedule(
         client: HttpClient,

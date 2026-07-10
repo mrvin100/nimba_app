@@ -45,6 +45,7 @@ class CreditCaseController(
                     currency = request.currency,
                     createdBy = currentUser.id(),
                     accountNumber = request.accountNumber,
+                    contractType = request.contractType,
                 ),
             ).toResponse()
 
@@ -61,6 +62,7 @@ class CreditCaseController(
                     productType = request.productType,
                     currency = request.currency,
                     accountNumber = request.accountNumber,
+                    contractType = request.contractType,
                 ),
             ).toResponse()
 
