@@ -104,6 +104,9 @@ kover {
                     "com.nimba.identity.internal.OrganizationLogoStorage",
                     "com.nimba.identity.internal.OrganizationLogoService",
                     "com.nimba.identity.internal.OrganizationLogoObject",
+                    "com.nimba.guarantee.internal.GuaranteeStorageProperties",
+                    "com.nimba.guarantee.internal.GuaranteeAttachmentStorage",
+                    "com.nimba.guarantee.internal.GuaranteeAttachmentService",
                 )
             }
         }
