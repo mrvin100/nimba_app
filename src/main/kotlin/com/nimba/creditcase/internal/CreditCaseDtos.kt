@@ -1,14 +1,17 @@
 package com.nimba.creditcase.internal
 
+import com.nimba.creditcase.ClientIdentityInfo
 import com.nimba.creditcase.ContractType
 import com.nimba.creditcase.CreditCaseInfo
 import com.nimba.creditcase.CreditCaseStatus
 import com.nimba.creditcase.ProductType
+import com.nimba.creditcase.UpdateClientIdentityCommand
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 /**
@@ -43,6 +46,7 @@ data class CreditCaseResponse(
     val createdAt: Instant,
     val accountNumber: String?,
     val archivedAt: Instant?,
+    val clientIdentity: ClientIdentityInfo,
 )
 
 internal fun CreditCaseInfo.toResponse(): CreditCaseResponse =
@@ -57,6 +61,56 @@ internal fun CreditCaseInfo.toResponse(): CreditCaseResponse =
         createdAt = createdAt,
         accountNumber = accountNumber,
         archivedAt = archivedAt,
+        clientIdentity = clientIdentity,
+    )
+
+/**
+ * Write payload for a case's client-identity details — a separate concern from
+ * [CreditCaseWriteRequest] (identity is optional supplementary detail added
+ * incrementally, not part of the required create/edit fields). Every field is
+ * optional; blanks are treated as "not captured".
+ */
+data class ClientIdentityRequest(
+    @field:Size(max = 100, message = "100 caractères maximum")
+    val formeJuridique: String? = null,
+    val dateCreation: LocalDate? = null,
+    @field:Size(max = 300, message = "300 caractères maximum")
+    val adressePhysique: String? = null,
+    @field:Size(max = 300, message = "300 caractères maximum")
+    val activiteDeBase: String? = null,
+    @field:Size(max = 50, message = "50 caractères maximum")
+    val codeNif: String? = null,
+    @field:Size(max = 200, message = "200 caractères maximum")
+    val principalDirigeant: String? = null,
+    val dateEntreeRelation: LocalDate? = null,
+    val dateDerniereVisite: LocalDate? = null,
+    @field:Size(max = 100, message = "100 caractères maximum")
+    val agence: String? = null,
+    @field:Size(max = 200, message = "200 caractères maximum")
+    val gestionnaire: String? = null,
+    @field:Size(max = 200, message = "200 caractères maximum")
+    val analyste: String? = null,
+    @field:Size(max = 20, message = "20 caractères maximum")
+    val cotationPrecedente: String? = null,
+    @field:Size(max = 20, message = "20 caractères maximum")
+    val cotationActuelle: String? = null,
+)
+
+internal fun ClientIdentityRequest.toCommand(): UpdateClientIdentityCommand =
+    UpdateClientIdentityCommand(
+        formeJuridique = formeJuridique,
+        dateCreation = dateCreation,
+        adressePhysique = adressePhysique,
+        activiteDeBase = activiteDeBase,
+        codeNif = codeNif,
+        principalDirigeant = principalDirigeant,
+        dateEntreeRelation = dateEntreeRelation,
+        dateDerniereVisite = dateDerniereVisite,
+        agence = agence,
+        gestionnaire = gestionnaire,
+        analyste = analyste,
+        cotationPrecedente = cotationPrecedente,
+        cotationActuelle = cotationActuelle,
     )
 
 /** Row in the dashboard's credit-case list. */
