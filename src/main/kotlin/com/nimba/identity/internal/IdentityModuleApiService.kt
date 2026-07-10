@@ -21,6 +21,10 @@ class IdentityModuleApiService(
         users.findById(userId).map { user -> user.memberships.map { it.department }.toSet() }.orElse(emptySet())
 
     @Transactional(readOnly = true)
+    override fun membersOf(department: Department): List<UserInfo> =
+        users.findByMembershipDepartments(listOf(department)).map { it.toUserInfo() }
+
+    @Transactional(readOnly = true)
     override fun organizationLogo(): OrganizationLogo? = logos.find()?.let { OrganizationLogo(it.bytes, it.contentType) }
 }
 

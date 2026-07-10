@@ -6,6 +6,7 @@ import com.nimba.creditcase.CreditCaseModuleApi
 import com.nimba.creditcase.getOrThrow
 import com.nimba.identity.Department
 import com.nimba.identity.IdentityModuleApi
+import com.nimba.notification.NotificationModuleApi
 import com.nimba.workflow.WorkflowAction
 import com.nimba.workflow.WorkflowStatus
 import org.springframework.http.HttpStatus
@@ -29,6 +30,7 @@ class WorkflowService(
     private val creditCases: CreditCaseModuleApi,
     private val analysisSheets: AnalysisSheetModuleApi,
     private val identity: IdentityModuleApi,
+    private val notifications: NotificationModuleApi,
 ) {
     private companion object {
         const val COMITE_APPROVALS_REQUIRED = 2
@@ -92,7 +94,38 @@ class WorkflowService(
                 comment = comment?.takeIf { it.isNotBlank() },
             ),
         )
+        if (to != from) {
+            val caseNumber = creditCases.findById(creditCaseId)?.caseNumber ?: creditCaseId.toString()
+            notifyNextActor(creditCaseId, caseNumber, to)
+        }
         return workflow.toState(callerId, identity.departmentsOf(callerId))
+    }
+
+    /** Tells whoever must act next that the dossier is waiting on them (design §5). */
+    private fun notifyNextActor(
+        creditCaseId: UUID,
+        caseNumber: String,
+        to: WorkflowStatus,
+    ) {
+        when (to) {
+            WorkflowStatus.EN_REVUE_DCM ->
+                notifications.notifyDepartment(Department.DCM, creditCaseId, "Dossier $caseNumber soumis pour revue")
+            WorkflowStatus.EN_REVUE_DRC ->
+                notifications.notifyDepartment(Department.DRC, creditCaseId, "Dossier $caseNumber approuvé par la DCM, à votre revue")
+            WorkflowStatus.PRET_POUR_COMITE ->
+                notifications.notifyDepartment(Department.COMITE, creditCaseId, "Dossier $caseNumber prêt pour le comité")
+            WorkflowStatus.APPROUVE -> {
+                notifications.notifyDepartment(Department.DCM, creditCaseId, "Dossier $caseNumber approuvé par le comité")
+                notifications.notifyDepartment(Department.DRI, creditCaseId, "Dossier $caseNumber approuvé par le comité")
+            }
+            WorkflowStatus.REJETE -> {
+                notifications.notifyDepartment(Department.DCM, creditCaseId, "Dossier $caseNumber rejeté par le comité")
+                notifications.notifyDepartment(Department.DRI, creditCaseId, "Dossier $caseNumber rejeté par le comité")
+            }
+            WorkflowStatus.BROUILLON ->
+                notifications.notifyDepartment(Department.DRI, creditCaseId, "Dossier $caseNumber renvoyé pour modifications")
+            else -> {}
+        }
     }
 
     @Transactional(readOnly = true)

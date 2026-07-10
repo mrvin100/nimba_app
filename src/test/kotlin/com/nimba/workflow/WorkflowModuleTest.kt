@@ -13,6 +13,7 @@ import com.nimba.creditcase.CreditCaseModuleApi
 import com.nimba.creditcase.ProductType
 import com.nimba.identity.Department
 import com.nimba.identity.internal.UserRepository
+import com.nimba.notification.internal.NotificationService
 import com.nimba.seedMember
 import com.nimba.workflow.internal.WorkflowService
 import org.junit.jupiter.api.Test
@@ -37,6 +38,7 @@ class WorkflowModuleTest(
     @Autowired private val schedules: AmortizationScheduleRepository,
     @Autowired private val users: UserRepository,
     @Autowired private val passwordEncoder: PasswordEncoder,
+    @Autowired private val notifications: NotificationService,
 ) {
     private fun memberId(
         email: String,
@@ -95,17 +97,28 @@ class WorkflowModuleTest(
         val comite2 = memberId("wf-hp-comite2@banque.test", Department.COMITE)
 
         assertEquals(WorkflowStatus.EN_REVUE_DCM, workflow.act(caseId, dri, WorkflowAction.SUBMIT, null).status)
+        assertEquals(1L, notifications.unreadCount(dcm), "SUBMIT must notify the DCM")
+
         assertEquals(WorkflowStatus.EN_REVUE_DRC, workflow.act(caseId, dcm, WorkflowAction.APPROVE, "OK crédit").status)
+        assertEquals(1L, notifications.unreadCount(drc), "DCM approval must notify the DRC")
+
         assertEquals(WorkflowStatus.PRET_POUR_COMITE, workflow.act(caseId, drc, WorkflowAction.APPROVE, null).status)
+        assertEquals(1L, notifications.unreadCount(comite1), "DRC approval must notify every comité member")
+        assertEquals(1L, notifications.unreadCount(comite2), "DRC approval must notify every comité member")
 
         val afterFirst = workflow.act(caseId, comite1, WorkflowAction.APPROVE, null)
         assertEquals(WorkflowStatus.PRET_POUR_COMITE, afterFirst.status)
         assertEquals(1, afterFirst.comiteApprovals)
+        assertEquals(1L, notifications.unreadCount(comite2), "a first comité vote (no status change) must not notify again")
 
         val afterSecond = workflow.act(caseId, comite2, WorkflowAction.APPROVE, null)
         assertEquals(WorkflowStatus.APPROUVE, afterSecond.status)
         assertEquals(2, afterSecond.comiteApprovals)
         assertTrue(afterSecond.timeline.any { it.action == WorkflowAction.SUBMIT })
+        // dcm already holds the SUBMIT notification (never read in this test); the
+        // comité outcome adds a second one.
+        assertEquals(2L, notifications.unreadCount(dcm), "the comité outcome must notify the DCM")
+        assertEquals(1L, notifications.unreadCount(dri), "the comité outcome must notify the DRI")
     }
 
     @Test
@@ -137,6 +150,7 @@ class WorkflowModuleTest(
         assertEquals(WorkflowStatus.BROUILLON, returned.status)
         assertEquals(0, returned.comiteApprovals)
         assertEquals(AnalysisSheetStatus.DRAFT, analysisSheets.findByCase(caseId)?.status)
+        assertEquals(1L, notifications.unreadCount(dri), "the return to DRI must notify the DRI")
     }
 
     @Test

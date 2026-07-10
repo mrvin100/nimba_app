@@ -18,6 +18,9 @@ interface IdentityModuleApi {
      */
     fun departmentsOf(userId: UUID): Set<Department>
 
+    /** Every active member of a direction (any role) — who the notification module fans out to. */
+    fun membersOf(department: Department): List<UserInfo>
+
     /** The configured organisation logo, or null when none has been uploaded. */
     fun organizationLogo(): OrganizationLogo?
 }
