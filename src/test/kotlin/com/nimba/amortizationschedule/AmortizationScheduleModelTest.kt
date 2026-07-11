@@ -92,6 +92,7 @@ class AmortizationScheduleModelTest(
         assertEquals(BigDecimal("34862507.0000"), summary?.totalAssurance)
         assertEquals(BigDecimal("7960000.0000"), summary?.totalTracking)
         assertEquals(BigDecimal("2000000.0000"), summary?.totalImmatriculation)
+        assertEquals(BigDecimal("29447980.0000"), summary?.totalInteret)
         assertEquals(BigDecimal("539571123.0000"), summary?.premierLoyerTtc)
         // Only one ordinary line: loyer mensuel falls back to it, no VR line uploaded.
         assertEquals(BigDecimal("534270486.0000"), summary?.loyerMensuelHt)
@@ -125,6 +126,7 @@ class AmortizationScheduleModelTest(
 
         assertEquals(2, summary.durationMonths)
         assertEquals(BigDecimal("920000000.0000"), summary.totalEquipement)
+        assertEquals(BigDecimal("58895960.0000"), summary.totalInteret)
         // The first line's loyer HT differs (600M); the second, steady-state one is what "loyer mensuel" reports.
         assertEquals(BigDecimal("534270486.0000"), summary.loyerMensuelHt)
         assertEquals(BigDecimal("46000000.0000"), summary.valeurResiduelle)

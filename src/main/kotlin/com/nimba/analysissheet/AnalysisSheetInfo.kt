@@ -10,7 +10,6 @@ data class AnalysisSheetInfo(
     val creditCaseId: UUID,
     val faVariant: FaVariant,
     val status: AnalysisSheetStatus,
-    val content: String?,
     val createdBy: UUID,
     val createdAt: Instant,
     val updatedAt: Instant,

@@ -22,6 +22,7 @@ import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 @Import(TestcontainersConfiguration::class)
 @SpringBootTest
@@ -107,20 +108,46 @@ class AnalysisSheetModuleTest(
     }
 
     @Test
-    fun `draft content can be edited, then locked by publishing`() {
+    fun `a section's content can be edited, then locked by publishing`() {
         val analyst = analystId()
         val caseId = leasingCaseId(analyst)
         uploadSchedule(caseId)
         sheets.create(CreateAnalysisSheetCommand(caseId, analyst))
 
-        sheets.updateDraft(caseId, "Analyse en cours de rédaction")
-        assertEquals("Analyse en cours de rédaction", sheets.findByCase(caseId)?.content)
+        sheets.updateSection(caseId, FaSectionKey.COVER_PROPOSITION, "Analyse en cours de rédaction")
+        val section = sheets.sections(caseId).first { it.key == FaSectionKey.COVER_PROPOSITION }
+        assertEquals("Analyse en cours de rédaction", section.contentJson)
 
         val published = sheets.publish(caseId)
         assertEquals(AnalysisSheetStatus.PUBLISHED, published.status)
 
-        assertFailsWith<ResponseStatusException> { sheets.updateDraft(caseId, "trop tard") }
+        assertFailsWith<ResponseStatusException> { sheets.updateSection(caseId, FaSectionKey.COVER_PROPOSITION, "trop tard") }
         assertFailsWith<ResponseStatusException> { sheets.publish(caseId) }
+    }
+
+    @Test
+    fun `every registered section is returned even before anything is saved`() {
+        val analyst = analystId()
+        val caseId = leasingCaseId(analyst)
+        uploadSchedule(caseId)
+        sheets.create(CreateAnalysisSheetCommand(caseId, analyst))
+
+        val sections = sheets.sections(caseId)
+
+        assertEquals(FaSectionRegistry.sectionsFor(FaVariant.LEASING_AVEC_CONTRAT).size, sections.size)
+        assertTrue(sections.all { it.contentJson == null })
+    }
+
+    @Test
+    fun `rejects saving content to a non-editable or out-of-variant section`() {
+        val analyst = analystId()
+        val caseId = leasingCaseId(analyst)
+        uploadSchedule(caseId)
+        sheets.create(CreateAnalysisSheetCommand(caseId, analyst))
+
+        assertFailsWith<ResponseStatusException> {
+            sheets.updateSection(caseId, FaSectionKey.PILIER3_RENTABILITE_BANQUE, "non éditable")
+        }
     }
 
     @Test

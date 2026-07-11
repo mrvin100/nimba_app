@@ -25,6 +25,8 @@ data class ScheduleSummary(
     val totalTracking: BigDecimal,
     /** Sum of the "immatriculation" column across ordinary échéances. */
     val totalImmatriculation: BigDecimal,
+    /** Sum of the "intérêt" column across ordinary échéances — the FA §3.4's "intérêts sur durée". */
+    val totalInteret: BigDecimal,
     /** The first ordinary échéance's loyer TTC — the FA cover's "1er loyer TTC". */
     val premierLoyerTtc: BigDecimal?,
     /**

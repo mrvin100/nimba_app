@@ -100,12 +100,21 @@ class AnalysisSheetEndpointTest(
         assertContains(created.body(), "\"faVariant\":\"LEASING_AVEC_CONTRAT\"")
         assertContains(created.body(), "\"taSummary\"")
 
+        val sections =
+            client.send(
+                HttpRequest.newBuilder(URI("${path(caseId)}/sections")).GET().build(),
+                HttpResponse.BodyHandlers.ofString(),
+            )
+        assertEquals(200, sections.statusCode(), sections.body())
+        assertContains(sections.body(), "\"key\":\"COVER_PROPOSITION\"")
+        assertContains(sections.body(), "\"type\":\"COMPUTED\"")
+
         val updated =
             client.send(
                 HttpRequest
-                    .newBuilder(URI(path(caseId)))
+                    .newBuilder(URI("${path(caseId)}/sections/COVER_PROPOSITION"))
                     .header("Content-Type", "application/json")
-                    .PUT(HttpRequest.BodyPublishers.ofString("""{"content":"Notes d'analyse"}"""))
+                    .PUT(HttpRequest.BodyPublishers.ofString("""{"contentJson":"Notes d'analyse"}"""))
                     .build(),
                 HttpResponse.BodyHandlers.ofString(),
             )
@@ -123,9 +132,9 @@ class AnalysisSheetEndpointTest(
         val lockedEdit =
             client.send(
                 HttpRequest
-                    .newBuilder(URI(path(caseId)))
+                    .newBuilder(URI("${path(caseId)}/sections/COVER_PROPOSITION"))
                     .header("Content-Type", "application/json")
-                    .PUT(HttpRequest.BodyPublishers.ofString("""{"content":"trop tard"}"""))
+                    .PUT(HttpRequest.BodyPublishers.ofString("""{"contentJson":"trop tard"}"""))
                     .build(),
                 HttpResponse.BodyHandlers.ofString(),
             )

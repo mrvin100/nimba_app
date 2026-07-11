@@ -15,9 +15,9 @@ import java.util.UUID
 
 /**
  * A case's Fiche d'analyse. [creditCaseId] references the credit-case module's
- * aggregate by id only — no JPA relationship crosses the module boundary. [content]
- * is a placeholder free-text field standing in for the real per-variant structure
- * (sections, figures) until it is supplied; see docs/nimba-credit-workflow-design.md.
+ * aggregate by id only — no JPA relationship crosses the module boundary. Its
+ * content lives in per-section [AnalysisSheetSection] rows (see
+ * [com.nimba.analysissheet.FaSectionRegistry]), not on this entity.
  */
 @Entity
 @Table(name = "analysis_sheet")
@@ -29,8 +29,6 @@ class AnalysisSheet(
     val faVariant: FaVariant,
     @Column(name = "created_by", nullable = false, updatable = false)
     val createdBy: UUID,
-    @Column(name = "content", columnDefinition = "TEXT")
-    var content: String? = null,
 ) {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

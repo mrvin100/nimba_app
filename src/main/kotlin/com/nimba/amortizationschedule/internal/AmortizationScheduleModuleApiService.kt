@@ -37,6 +37,7 @@ class AmortizationScheduleModuleApiService(
             totalAssurance = ordinary.sumOf { it.assurance },
             totalTracking = ordinary.sumOf { it.tracking },
             totalImmatriculation = ordinary.sumOf { it.immatriculation },
+            totalInteret = ordinary.sumOf { it.interet },
             premierLoyerTtc = firstOrdinary?.loyerTtc,
             loyerMensuelHt = (secondOrdinary ?: firstOrdinary)?.loyerHt,
             valeurResiduelle = vr?.interet,
