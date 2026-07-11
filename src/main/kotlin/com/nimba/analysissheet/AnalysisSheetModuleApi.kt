@@ -13,11 +13,23 @@ interface AnalysisSheetModuleApi {
     /** Opens the FA in DRAFT. 409 if one already exists for the case. */
     fun create(command: CreateAnalysisSheetCommand): AnalysisSheetInfo
 
-    /** Replaces the draft content. 409 if the FA is already PUBLISHED. */
-    fun updateDraft(
+    /**
+     * The case's FA sections, per [FaSectionRegistry] for its variant — empty
+     * list if the case has no FA yet. Every applicable key is returned even when
+     * nothing was saved to it, so the frontend always renders the full skeleton.
+     */
+    fun sections(creditCaseId: UUID): List<FaSectionInfo>
+
+    /**
+     * Replaces one editable section's content. 409 if the FA is already
+     * PUBLISHED, 400 if [key] is not editable ([FaSectionType.isEditable]) or
+     * does not apply to the case's variant.
+     */
+    fun updateSection(
         creditCaseId: UUID,
-        content: String?,
-    ): AnalysisSheetInfo
+        key: FaSectionKey,
+        contentJson: String?,
+    ): FaSectionInfo
 
     /** Locks the FA. 409 if already PUBLISHED. */
     fun publish(creditCaseId: UUID): AnalysisSheetInfo

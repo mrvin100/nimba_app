@@ -5,6 +5,9 @@ import com.nimba.analysissheet.AnalysisSheetInfo
 import com.nimba.analysissheet.AnalysisSheetModuleApi
 import com.nimba.analysissheet.AnalysisSheetStatus
 import com.nimba.analysissheet.CreateAnalysisSheetCommand
+import com.nimba.analysissheet.FaSectionInfo
+import com.nimba.analysissheet.FaSectionKey
+import com.nimba.analysissheet.FaSectionRegistry
 import com.nimba.creditcase.CaseTypePolicies
 import com.nimba.creditcase.CreditCaseModuleApi
 import com.nimba.creditcase.getOrThrow
@@ -18,6 +21,7 @@ import java.util.UUID
 @Service
 class AnalysisSheetModuleApiService(
     private val sheets: AnalysisSheetRepository,
+    private val sectionsRepo: AnalysisSheetSectionRepository,
     private val creditCases: CreditCaseModuleApi,
     private val amortizationSchedules: AmortizationScheduleModuleApi,
 ) : AnalysisSheetModuleApi {
@@ -51,15 +55,38 @@ class AnalysisSheetModuleApiService(
         return saved.toInfo()
     }
 
+    @Transactional(readOnly = true)
+    override fun sections(creditCaseId: UUID): List<FaSectionInfo> {
+        val sheet = sheets.findByCreditCaseId(creditCaseId) ?: return emptyList()
+        val keys = FaSectionRegistry.sectionsFor(sheet.faVariant)
+        val stored = sectionsRepo.findByAnalysisSheetId(requireNotNull(sheet.id)).associateBy { it.sectionKey }
+        return keys.map { key ->
+            val row = stored[key]
+            FaSectionInfo(key, key.pilier, key.type, key.label, row?.contentJson, row?.updatedAt)
+        }
+    }
+
     @Transactional
-    override fun updateDraft(
+    override fun updateSection(
         creditCaseId: UUID,
-        content: String?,
-    ): AnalysisSheetInfo {
+        key: FaSectionKey,
+        contentJson: String?,
+    ): FaSectionInfo {
         val sheet = requireDraft(creditCaseId)
-        sheet.content = content
-        sheet.updatedAt = Instant.now()
-        return sheet.toInfo()
+        if (!key.type.isEditable) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "La section « ${key.label} » n'est pas éditable")
+        }
+        if (key !in FaSectionRegistry.sectionsFor(sheet.faVariant)) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "La section « ${key.label} » ne s'applique pas à ce type de dossier")
+        }
+        val sheetId = requireNotNull(sheet.id)
+        val row =
+            sectionsRepo.findByAnalysisSheetIdAndSectionKey(sheetId, key)
+                ?: AnalysisSheetSection(analysisSheetId = sheetId, sectionKey = key)
+        row.contentJson = contentJson
+        row.updatedAt = Instant.now()
+        val saved = sectionsRepo.save(row)
+        return FaSectionInfo(key, key.pilier, key.type, key.label, saved.contentJson, saved.updatedAt)
     }
 
     @Transactional
@@ -98,7 +125,6 @@ internal fun AnalysisSheet.toInfo(): AnalysisSheetInfo =
         creditCaseId = creditCaseId,
         faVariant = faVariant,
         status = status,
-        content = content,
         createdBy = createdBy,
         createdAt = createdAt,
         updatedAt = updatedAt,

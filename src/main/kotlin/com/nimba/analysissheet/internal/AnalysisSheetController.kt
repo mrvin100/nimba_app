@@ -3,6 +3,7 @@ package com.nimba.analysissheet.internal
 import com.nimba.amortizationschedule.AmortizationScheduleModuleApi
 import com.nimba.analysissheet.AnalysisSheetModuleApi
 import com.nimba.analysissheet.CreateAnalysisSheetCommand
+import com.nimba.analysissheet.FaSectionKey
 import com.nimba.shared.CurrentUser
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
@@ -43,11 +44,17 @@ class AnalysisSheetController(
         return sheet.toResponse(amortizationSchedules.scheduleSummary(caseId))
     }
 
-    @PutMapping
-    fun update(
+    @GetMapping("/sections")
+    fun sections(
         @PathVariable caseId: UUID,
-        @Valid @RequestBody request: AnalysisSheetContentRequest,
-    ): AnalysisSheetResponse = sheets.updateDraft(caseId, request.content).toResponse(amortizationSchedules.scheduleSummary(caseId))
+    ): List<FaSectionResponse> = sheets.sections(caseId).map { it.toResponse() }
+
+    @PutMapping("/sections/{key}")
+    fun updateSection(
+        @PathVariable caseId: UUID,
+        @PathVariable key: FaSectionKey,
+        @Valid @RequestBody request: FaSectionRequest,
+    ): FaSectionResponse = sheets.updateSection(caseId, key, request.contentJson).toResponse()
 
     @PostMapping("/publish")
     fun publish(
