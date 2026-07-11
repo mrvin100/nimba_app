@@ -36,6 +36,12 @@ interface CreditCaseModuleApi {
         command: UpdateClientIdentityCommand,
     ): CreditCaseInfo
 
+    /** Replaces a case's conditions-de-banque details wholesale; 404 if unknown. */
+    fun updateConditionsDeBanque(
+        id: UUID,
+        command: UpdateConditionsDeBanqueCommand,
+    ): CreditCaseInfo
+
     fun findById(id: UUID): CreditCaseInfo?
 
     fun findByCaseNumber(caseNumber: String): CreditCaseInfo?

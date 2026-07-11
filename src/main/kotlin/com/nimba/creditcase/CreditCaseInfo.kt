@@ -24,4 +24,5 @@ data class CreditCaseInfo(
     /** When an administrator archived the case; null while it is active. */
     val archivedAt: Instant? = null,
     val clientIdentity: ClientIdentityInfo = ClientIdentityInfo(),
+    val conditionsDeBanque: ConditionsDeBanqueInfo = ConditionsDeBanqueInfo(),
 )

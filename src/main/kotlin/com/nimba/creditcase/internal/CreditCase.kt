@@ -71,7 +71,19 @@ class CreditCase(
      */
     @Embedded
     var clientIdentity: ClientIdentity? = ClientIdentity()
+
+    /**
+     * Bank-set financing terms reused across the FA/PV/FMP; see [ConditionsDeBanque].
+     * Nullable for the same reason as [clientIdentity] (Hibernate's all-columns-null
+     * embeddable gotcha). Read through [CreditCase.conditionsOrEmpty], never this
+     * property directly.
+     */
+    @Embedded
+    var conditionsDeBanque: ConditionsDeBanque? = ConditionsDeBanque()
 }
 
 /** [CreditCase.clientIdentity], defaulting the "nothing captured yet" case to an empty value object. */
 internal fun CreditCase.identityOrEmpty(): ClientIdentity = clientIdentity ?: ClientIdentity()
+
+/** [CreditCase.conditionsDeBanque], defaulting the "nothing captured yet" case to an empty value object. */
+internal fun CreditCase.conditionsOrEmpty(): ConditionsDeBanque = conditionsDeBanque ?: ConditionsDeBanque()

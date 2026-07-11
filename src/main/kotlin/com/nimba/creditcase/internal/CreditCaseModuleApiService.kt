@@ -2,6 +2,7 @@ package com.nimba.creditcase.internal
 
 import com.nimba.creditcase.CaseTypePolicies
 import com.nimba.creditcase.ClientIdentityInfo
+import com.nimba.creditcase.ConditionsDeBanqueInfo
 import com.nimba.creditcase.ContractType
 import com.nimba.creditcase.CreateCreditCaseCommand
 import com.nimba.creditcase.CreditCaseCreated
@@ -11,6 +12,7 @@ import com.nimba.creditcase.CreditCaseModuleApi
 import com.nimba.creditcase.CreditCaseStatus
 import com.nimba.creditcase.ProductType
 import com.nimba.creditcase.UpdateClientIdentityCommand
+import com.nimba.creditcase.UpdateConditionsDeBanqueCommand
 import com.nimba.creditcase.UpdateCreditCaseCommand
 import com.nimba.identity.IdentityModuleApi
 import com.nimba.shared.getOrThrow
@@ -79,6 +81,17 @@ class CreditCaseModuleApiService(
     ): CreditCaseInfo {
         val case = creditCases.getOrThrow(id, "Dossier introuvable")
         case.clientIdentity = command.toClientIdentity()
+        case.updatedAt = Instant.now()
+        return case.toCreditCaseInfo()
+    }
+
+    @Transactional
+    override fun updateConditionsDeBanque(
+        id: UUID,
+        command: UpdateConditionsDeBanqueCommand,
+    ): CreditCaseInfo {
+        val case = creditCases.getOrThrow(id, "Dossier introuvable")
+        case.conditionsDeBanque = command.toConditionsDeBanque()
         case.updatedAt = Instant.now()
         return case.toCreditCaseInfo()
     }
@@ -173,6 +186,7 @@ internal fun CreditCase.toCreditCaseInfo(): CreditCaseInfo =
         accountNumber = accountNumber,
         archivedAt = archivedAt,
         clientIdentity = identityOrEmpty().toInfo(),
+        conditionsDeBanque = conditionsOrEmpty().toInfo(),
     )
 
 private fun ClientIdentity.toInfo(): ClientIdentityInfo =
@@ -207,4 +221,22 @@ private fun UpdateClientIdentityCommand.toClientIdentity(): ClientIdentity =
         analyste = analyste?.takeIf { it.isNotBlank() },
         cotationPrecedente = cotationPrecedente?.takeIf { it.isNotBlank() },
         cotationActuelle = cotationActuelle?.takeIf { it.isNotBlank() },
+    )
+
+private fun ConditionsDeBanque.toInfo(): ConditionsDeBanqueInfo =
+    ConditionsDeBanqueInfo(
+        tauxInteretPct = tauxInteretPct,
+        fraisMiseEnPlacePct = fraisMiseEnPlacePct,
+        comEngagementPct = comEngagementPct,
+        fraisEtudesPct = fraisEtudesPct,
+        fraisDivers = fraisDivers,
+    )
+
+private fun UpdateConditionsDeBanqueCommand.toConditionsDeBanque(): ConditionsDeBanque =
+    ConditionsDeBanque(
+        tauxInteretPct = tauxInteretPct,
+        fraisMiseEnPlacePct = fraisMiseEnPlacePct,
+        comEngagementPct = comEngagementPct,
+        fraisEtudesPct = fraisEtudesPct,
+        fraisDivers = fraisDivers?.takeIf { it.isNotBlank() },
     )
