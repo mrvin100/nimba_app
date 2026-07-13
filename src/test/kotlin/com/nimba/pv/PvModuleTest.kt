@@ -1,0 +1,192 @@
+package com.nimba.pv
+
+import com.nimba.TestcontainersConfiguration
+import com.nimba.amortizationschedule.internal.AmortizationSchedule
+import com.nimba.amortizationschedule.internal.AmortizationScheduleLine
+import com.nimba.amortizationschedule.internal.AmortizationScheduleRepository
+import com.nimba.analysissheet.AnalysisSheetModuleApi
+import com.nimba.analysissheet.CreateAnalysisSheetCommand
+import com.nimba.creditcase.ContractType
+import com.nimba.creditcase.CreateCreditCaseCommand
+import com.nimba.creditcase.CreditCaseModuleApi
+import com.nimba.creditcase.ProductType
+import com.nimba.creditcase.UpdateConditionsDeBanqueCommand
+import com.nimba.guarantee.CreateGuaranteeCommand
+import com.nimba.guarantee.GuaranteeKind
+import com.nimba.guarantee.GuaranteeModuleApi
+import com.nimba.identity.Department
+import com.nimba.identity.internal.UserRepository
+import com.nimba.seedMember
+import com.nimba.workflow.WorkflowAction
+import com.nimba.workflow.internal.WorkflowService
+import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.context.annotation.Import
+import org.springframework.security.crypto.password.PasswordEncoder
+import org.springframework.web.server.ResponseStatusException
+import java.math.BigDecimal
+import java.time.LocalDate
+import java.util.UUID
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
+
+@Import(TestcontainersConfiguration::class)
+@SpringBootTest
+class PvModuleTest(
+    @Autowired private val pvs: PvModuleApi,
+    @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val analysisSheets: AnalysisSheetModuleApi,
+    @Autowired private val guarantees: GuaranteeModuleApi,
+    @Autowired private val schedules: AmortizationScheduleRepository,
+    @Autowired private val workflow: WorkflowService,
+    @Autowired private val users: UserRepository,
+    @Autowired private val passwordEncoder: PasswordEncoder,
+) {
+    private fun memberId(
+        email: String,
+        department: Department,
+    ): UUID = requireNotNull(seedMember(users, passwordEncoder, email, department).id)
+
+    /** A dossier driven all the way to APPROUVE, with an identity, a guarantee and conditions de banque set. */
+    private fun approvedDossier(): UUID {
+        val dri = memberId("pv-dri-${UUID.randomUUID()}@banque.test", Department.DRI)
+        val dcm = memberId("pv-dcm-${UUID.randomUUID()}@banque.test", Department.DCM)
+        val drc = memberId("pv-drc-${UUID.randomUUID()}@banque.test", Department.DRC)
+        val comite1 = memberId("pv-comite1-${UUID.randomUUID()}@banque.test", Department.COMITE)
+        val comite2 = memberId("pv-comite2-${UUID.randomUUID()}@banque.test", Department.COMITE)
+
+        val caseId =
+            creditCases
+                .createCase(
+                    CreateCreditCaseCommand("Client PV", ProductType.LEASING, "GNF", dri, contractType = ContractType.AVEC_CONTRAT),
+                ).id
+        val line =
+            AmortizationScheduleLine(
+                numeroEcheance = "1",
+                dateEcheance = LocalDate.of(2026, 5, 1),
+                interet = BigDecimal("100.0000"),
+                equipement = BigDecimal("900.0000"),
+                assurance = BigDecimal.ZERO,
+                tracking = BigDecimal.ZERO,
+                immatriculation = BigDecimal.ZERO,
+                capital = BigDecimal("900.0000"),
+                loyerHt = BigDecimal("1000.0000"),
+                taxes = BigDecimal.ZERO,
+                loyerTtc = BigDecimal("1000.0000"),
+                capitalRestantDu = BigDecimal.ZERO,
+            )
+        schedules.saveAndFlush(AmortizationSchedule(caseId, 1, "echeancier.csv", dri).apply { addLine(line) })
+        analysisSheets.create(CreateAnalysisSheetCommand(caseId, dri))
+        analysisSheets.publish(caseId)
+        creditCases.updateIdentity(
+            caseId,
+            com.nimba.creditcase.UpdateClientIdentityCommand(formeJuridique = "SARL", principalDirigeant = "Mamadou Diallo"),
+        )
+        creditCases.updateConditionsDeBanque(caseId, UpdateConditionsDeBanqueCommand(tauxInteretPct = BigDecimal("9.5")))
+        guarantees.create(CreateGuaranteeCommand(caseId, GuaranteeKind.DETENUE, "Nantissement matériel", dri))
+
+        workflow.act(caseId, dri, WorkflowAction.SUBMIT, null)
+        workflow.act(caseId, dcm, WorkflowAction.APPROVE, null)
+        workflow.act(caseId, drc, WorkflowAction.APPROVE, null)
+        workflow.act(caseId, comite1, WorkflowAction.APPROVE, null)
+        workflow.act(caseId, comite2, WorkflowAction.APPROVE, null)
+        return caseId
+    }
+
+    @Test
+    fun `a PV cannot be created before the comite approves the dossier`() {
+        val dri = memberId("pv-early-dri@banque.test", Department.DRI)
+        val caseId =
+            creditCases
+                .createCase(
+                    CreateCreditCaseCommand("Trop tôt", ProductType.LEASING, "GNF", dri, contractType = ContractType.AVEC_CONTRAT),
+                ).id
+
+        assertFailsWith<ResponseStatusException> {
+            pvs.create(CreatePvCommand(caseId, dri, LocalDate.of(2026, 7, 13)))
+        }
+    }
+
+    @Test
+    fun `drafts, edits and finalizes a PV with a frozen snapshot`() {
+        val caseId = approvedDossier()
+        val dcm = memberId("pv-draft-dcm@banque.test", Department.DCM)
+
+        val created = pvs.create(CreatePvCommand(caseId, dcm, LocalDate.of(2026, 7, 13)))
+        assertEquals(PvStatus.DRAFT, created.status)
+        assertNull(created.snapshot)
+
+        val updated =
+            pvs.updateDraft(
+                caseId,
+                UpdatePvDraftCommand(
+                    seanceDate = LocalDate.of(2026, 7, 14),
+                    rapporteur = "Souwla Soumaoro",
+                    president = "Emile Traoré",
+                    pointsForts = "Client fidèle",
+                    pointsFaibles = "Trésorerie tendue",
+                    debats =
+                        listOf(
+                            PvDebat("Retard sur un précédent crédit", "Retard isolé, régularisé", "Favorable sous condition"),
+                        ),
+                ),
+            )
+        assertEquals(LocalDate.of(2026, 7, 14), updated.seanceDate)
+        assertEquals(1, updated.debats.size)
+
+        val finalized = pvs.finalize(caseId)
+        assertEquals(PvStatus.FINAL, finalized.status)
+        val snapshot = requireNotNull(finalized.snapshot)
+        assertEquals("SARL", snapshot.identite.formeJuridique)
+        assertEquals(BigDecimal("9.500"), snapshot.conditionsDeBanque.tauxInteretPct)
+        assertEquals(1, snapshot.garanties.size)
+        assertEquals("Nantissement matériel", snapshot.garanties.first().description)
+        assertEquals(BigDecimal("900.0000"), snapshot.articulation.loanAmount)
+
+        // The snapshot must survive the dossier's live data changing afterward.
+        creditCases.updateIdentity(caseId, com.nimba.creditcase.UpdateClientIdentityCommand(formeJuridique = "SA"))
+        val reloaded = requireNotNull(pvs.findByCase(caseId))
+        assertEquals("SARL", requireNotNull(reloaded.snapshot).identite.formeJuridique)
+    }
+
+    @Test
+    fun `a second PV cannot be created for the same case`() {
+        val caseId = approvedDossier()
+        val dcm = memberId("pv-dup-dcm@banque.test", Department.DCM)
+        pvs.create(CreatePvCommand(caseId, dcm, LocalDate.of(2026, 7, 13)))
+
+        assertFailsWith<ResponseStatusException> {
+            pvs.create(CreatePvCommand(caseId, dcm, LocalDate.of(2026, 7, 13)))
+        }
+    }
+
+    @Test
+    fun `a finalized PV rejects further draft edits`() {
+        val caseId = approvedDossier()
+        val dcm = memberId("pv-locked-dcm@banque.test", Department.DCM)
+        pvs.create(CreatePvCommand(caseId, dcm, LocalDate.of(2026, 7, 13)))
+        pvs.finalize(caseId)
+
+        assertFailsWith<ResponseStatusException> {
+            pvs.updateDraft(
+                caseId,
+                UpdatePvDraftCommand(LocalDate.of(2026, 7, 13), null, null, null, null, emptyList()),
+            )
+        }
+        assertFailsWith<ResponseStatusException> { pvs.finalize(caseId) }
+    }
+
+    @Test
+    fun `deleting the case purges its PV`() {
+        val caseId = approvedDossier()
+        val dcm = memberId("pv-purge-dcm@banque.test", Department.DCM)
+        pvs.create(CreatePvCommand(caseId, dcm, LocalDate.of(2026, 7, 13)))
+        pvs.finalize(caseId)
+
+        creditCases.delete(caseId)
+
+        assertNull(pvs.findByCase(caseId))
+    }
+}
