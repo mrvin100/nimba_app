@@ -49,8 +49,13 @@ class PvModuleTest(
         department: Department,
     ): UUID = requireNotNull(seedMember(users, passwordEncoder, email, department).id)
 
-    /** A dossier driven all the way to APPROUVE, with an identity, a guarantee and conditions de banque set. */
-    private fun approvedDossier(): UUID {
+    /**
+     * A dossier driven all the way to APPROUVE. [withIdentityAndConditions] set
+     * (the default) also captures an identity, a guarantee and conditions de
+     * banque; `false` leaves both entirely blank, to exercise finalizing a PV
+     * whose snapshot embeddables would end up with every column null.
+     */
+    private fun approvedDossier(withIdentityAndConditions: Boolean = true): UUID {
         val dri = memberId("pv-dri-${UUID.randomUUID()}@banque.test", Department.DRI)
         val dcm = memberId("pv-dcm-${UUID.randomUUID()}@banque.test", Department.DCM)
         val drc = memberId("pv-drc-${UUID.randomUUID()}@banque.test", Department.DRC)
@@ -80,12 +85,14 @@ class PvModuleTest(
         schedules.saveAndFlush(AmortizationSchedule(caseId, 1, "echeancier.csv", dri).apply { addLine(line) })
         analysisSheets.create(CreateAnalysisSheetCommand(caseId, dri))
         analysisSheets.publish(caseId)
-        creditCases.updateIdentity(
-            caseId,
-            com.nimba.creditcase.UpdateClientIdentityCommand(formeJuridique = "SARL", principalDirigeant = "Mamadou Diallo"),
-        )
-        creditCases.updateConditionsDeBanque(caseId, UpdateConditionsDeBanqueCommand(tauxInteretPct = BigDecimal("9.5")))
-        guarantees.create(CreateGuaranteeCommand(caseId, GuaranteeKind.DETENUE, "Nantissement matériel", dri))
+        if (withIdentityAndConditions) {
+            creditCases.updateIdentity(
+                caseId,
+                com.nimba.creditcase.UpdateClientIdentityCommand(formeJuridique = "SARL", principalDirigeant = "Mamadou Diallo"),
+            )
+            creditCases.updateConditionsDeBanque(caseId, UpdateConditionsDeBanqueCommand(tauxInteretPct = BigDecimal("9.5")))
+            guarantees.create(CreateGuaranteeCommand(caseId, GuaranteeKind.DETENUE, "Nantissement matériel", dri))
+        }
 
         workflow.act(caseId, dri, WorkflowAction.SUBMIT, null)
         workflow.act(caseId, dcm, WorkflowAction.APPROVE, null)
@@ -149,6 +156,21 @@ class PvModuleTest(
         creditCases.updateIdentity(caseId, com.nimba.creditcase.UpdateClientIdentityCommand(formeJuridique = "SA"))
         val reloaded = requireNotNull(pvs.findByCase(caseId))
         assertEquals("SARL", requireNotNull(reloaded.snapshot).identite.formeJuridique)
+    }
+
+    @Test
+    fun `finalizes a PV even when identity and conditions de banque were never captured`() {
+        val caseId = approvedDossier(withIdentityAndConditions = false)
+        val dcm = memberId("pv-blank-dcm@banque.test", Department.DCM)
+        pvs.create(CreatePvCommand(caseId, dcm, LocalDate.of(2026, 7, 13)))
+
+        val finalized = pvs.finalize(caseId)
+
+        val snapshot = requireNotNull(finalized.snapshot)
+        assertNull(snapshot.identite.formeJuridique)
+        assertNull(snapshot.conditionsDeBanque.tauxInteretPct)
+        assertEquals(0, snapshot.garanties.size)
+        assertEquals(BigDecimal("900.0000"), snapshot.articulation.loanAmount)
     }
 
     @Test

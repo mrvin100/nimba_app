@@ -133,9 +133,15 @@ class PvModuleApiService(
     }
 
     private fun Pv.toSnapshot(pvId: UUID): PvSnapshot {
-        val identity = requireNotNull(identitySnapshot)
+        // Hibernate reloads an `@Embedded` value object as null (not an empty
+        // instance) once every one of its columns is null — true whenever the
+        // dossier's identité/conditions de banque were never captured before
+        // finalization (both are optional, incremental data). articulationSnapshot
+        // is exempt: loanAmount/durationMonths always come from a real TA, so that
+        // embeddable's columns are never ALL null.
+        val identity = identitySnapshot ?: PvIdentitySnapshot()
         val articulation = requireNotNull(articulationSnapshot)
-        val conditions = requireNotNull(conditionsSnapshot)
+        val conditions = conditionsSnapshot ?: PvConditionsSnapshot()
         return PvSnapshot(
             identite =
                 ClientIdentityInfo(
