@@ -161,10 +161,10 @@ class SecurityConfig(
                 // (reviewers must see the TA, FA and timeline they are judging). Only
                 // the DRI mutates the dossier's constitution.
                 it.requestMatchers(HttpMethod.GET, "$base/credit-cases/**").hasAnyRole(*REVIEW_ROLES)
-                // Generating and drafting the PV is a DCM act (design §2/§7); reads
+                // Generating and drafting the PV/FMP is a DCM act (design §2/§7); reads
                 // fall through to the GET rule above, already open to every reviewer.
                 // Matched before the DRI-only rule for the same reason as workflow.
-                it.requestMatchers("$base/credit-cases/*/pv/**").hasRole("DCM_MEMBER")
+                it.requestMatchers("$base/credit-cases/*/pv/**", "$base/credit-cases/*/fmp/**").hasRole("DCM_MEMBER")
                 // Constituting the dossier (create/update, TA upload, FA edit/publish,
                 // trade generation) belongs to the DRI direction. The role hierarchy
                 // lets a DRI manager pass this check.
