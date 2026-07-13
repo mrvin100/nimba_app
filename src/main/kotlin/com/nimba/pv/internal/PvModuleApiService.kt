@@ -2,6 +2,8 @@ package com.nimba.pv.internal
 
 import com.nimba.amortizationschedule.AmortizationScheduleModuleApi
 import com.nimba.amortizationschedule.ScheduleSummary
+import com.nimba.analysissheet.AnalysisSheetModuleApi
+import com.nimba.analysissheet.FaSectionKey
 import com.nimba.creditcase.ClientIdentityInfo
 import com.nimba.creditcase.ConditionsDeBanqueInfo
 import com.nimba.creditcase.CreditCaseModuleApi
@@ -33,6 +35,7 @@ class PvModuleApiService(
     private val amortizationSchedules: AmortizationScheduleModuleApi,
     private val guarantees: GuaranteeModuleApi,
     private val workflow: WorkflowModuleApi,
+    private val analysisSheets: AnalysisSheetModuleApi,
 ) : PvModuleApi {
     @Transactional(readOnly = true)
     override fun findByCase(creditCaseId: UUID): PvInfo? = pvs.findByCreditCaseId(creditCaseId)?.toInfo()
@@ -66,8 +69,6 @@ class PvModuleApiService(
         pv.seanceDate = command.seanceDate
         pv.rapporteur = command.rapporteur?.takeIf { it.isNotBlank() }
         pv.president = command.president?.takeIf { it.isNotBlank() }
-        pv.pointsForts = command.pointsForts?.takeIf { it.isNotBlank() }
-        pv.pointsFaibles = command.pointsFaibles?.takeIf { it.isNotBlank() }
         pv.updatedAt = Instant.now()
 
         val pvId = requireNotNull(pv.id)
@@ -86,9 +87,13 @@ class PvModuleApiService(
             amortizationSchedules.scheduleSummary(creditCaseId)
                 ?: throw conflict("Aucun échéancier importé pour ce dossier")
 
+        val faSections = analysisSheets.sections(creditCaseId).associateBy { it.key }
+
         pv.identitySnapshot = case.clientIdentity.toSnapshot()
         pv.articulationSnapshot = articulation.toSnapshot()
         pv.conditionsSnapshot = case.conditionsDeBanque.toSnapshot()
+        pv.snapPointsForts = faSections[FaSectionKey.CONCLUSION_POINTS_FORTS]?.contentJson
+        pv.snapPointsFaibles = faSections[FaSectionKey.CONCLUSION_POINTS_FAIBLES]?.contentJson
         pv.status = PvStatus.FINAL
         pv.finalizedAt = Instant.now()
         pv.updatedAt = pv.finalizedAt!!
@@ -121,8 +126,6 @@ class PvModuleApiService(
             seanceDate = seanceDate,
             rapporteur = rapporteur,
             president = president,
-            pointsForts = pointsForts,
-            pointsFaibles = pointsFaibles,
             debats = debatRows.findByPvIdOrderByOrdreAsc(pvId).map { PvDebat(it.preoccupation, it.reponse, it.recommandation) },
             createdBy = createdBy,
             createdAt = createdAt,
@@ -181,8 +184,11 @@ class PvModuleApiService(
                     fraisMiseEnPlacePct = conditions.fraisMiseEnPlacePct,
                     comEngagementPct = conditions.comEngagementPct,
                     fraisEtudesPct = conditions.fraisEtudesPct,
+                    valeurResiduellePct = conditions.valeurResiduellePct,
                     fraisDivers = conditions.fraisDivers,
                 ),
+            pointsForts = snapPointsForts,
+            pointsFaibles = snapPointsFaibles,
         )
     }
 }
@@ -224,5 +230,6 @@ private fun ConditionsDeBanqueInfo.toSnapshot(): PvConditionsSnapshot =
         fraisMiseEnPlacePct = fraisMiseEnPlacePct,
         comEngagementPct = comEngagementPct,
         fraisEtudesPct = fraisEtudesPct,
+        valeurResiduellePct = valeurResiduellePct,
         fraisDivers = fraisDivers,
     )

@@ -12,8 +12,6 @@ data class PvInfo(
     val seanceDate: LocalDate,
     val rapporteur: String?,
     val president: String?,
-    val pointsForts: String?,
-    val pointsFaibles: String?,
     val debats: List<PvDebat>,
     val createdBy: UUID,
     val createdAt: Instant,

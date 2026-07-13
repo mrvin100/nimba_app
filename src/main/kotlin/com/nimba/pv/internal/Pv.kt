@@ -47,12 +47,6 @@ class Pv(
     @Column(name = "president")
     var president: String? = null
 
-    @Column(name = "points_forts", columnDefinition = "TEXT")
-    var pointsForts: String? = null
-
-    @Column(name = "points_faibles", columnDefinition = "TEXT")
-    var pointsFaibles: String? = null
-
     @Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: Instant = Instant.now()
 
@@ -76,4 +70,16 @@ class Pv(
 
     @Embedded
     var conditionsSnapshot: PvConditionsSnapshot? = null
+
+    /**
+     * Points forts/faibles frozen at finalization, read from the FA's own
+     * `CONCLUSION_POINTS_FORTS`/`CONCLUSION_POINTS_FAIBLES` sections — never
+     * typed on the PV itself (real-document analysis, 2026-07-13): the
+     * analyst's judgment lives on the FA, the PV only reuses it.
+     */
+    @Column(name = "snap_points_forts", columnDefinition = "TEXT")
+    var snapPointsForts: String? = null
+
+    @Column(name = "snap_points_faibles", columnDefinition = "TEXT")
+    var snapPointsFaibles: String? = null
 }

@@ -6,6 +6,7 @@ import com.nimba.amortizationschedule.internal.AmortizationScheduleLine
 import com.nimba.amortizationschedule.internal.AmortizationScheduleRepository
 import com.nimba.analysissheet.AnalysisSheetModuleApi
 import com.nimba.analysissheet.CreateAnalysisSheetCommand
+import com.nimba.analysissheet.FaSectionKey
 import com.nimba.creditcase.ContractType
 import com.nimba.creditcase.CreateCreditCaseCommand
 import com.nimba.creditcase.CreditCaseModuleApi
@@ -84,15 +85,23 @@ class PvModuleTest(
             )
         schedules.saveAndFlush(AmortizationSchedule(caseId, 1, "echeancier.csv", dri).apply { addLine(line) })
         analysisSheets.create(CreateAnalysisSheetCommand(caseId, dri))
-        analysisSheets.publish(caseId)
         if (withIdentityAndConditions) {
             creditCases.updateIdentity(
                 caseId,
                 com.nimba.creditcase.UpdateClientIdentityCommand(formeJuridique = "SARL", principalDirigeant = "Mamadou Diallo"),
             )
-            creditCases.updateConditionsDeBanque(caseId, UpdateConditionsDeBanqueCommand(tauxInteretPct = BigDecimal("9.5")))
+            creditCases.updateConditionsDeBanque(
+                caseId,
+                UpdateConditionsDeBanqueCommand(tauxInteretPct = BigDecimal("9.5"), valeurResiduellePct = BigDecimal("2")),
+            )
             guarantees.create(CreateGuaranteeCommand(caseId, GuaranteeKind.DETENUE, "Nantissement matériel", dri))
+            // Points forts/faibles are written on the FA (§5 conclusion) while it is
+            // still a draft — publishing locks section edits, exactly like every
+            // other FA section.
+            analysisSheets.updateSection(caseId, FaSectionKey.CONCLUSION_POINTS_FORTS, "Client fidèle")
+            analysisSheets.updateSection(caseId, FaSectionKey.CONCLUSION_POINTS_FAIBLES, "Trésorerie tendue")
         }
+        analysisSheets.publish(caseId)
 
         workflow.act(caseId, dri, WorkflowAction.SUBMIT, null)
         workflow.act(caseId, dcm, WorkflowAction.APPROVE, null)
@@ -132,8 +141,6 @@ class PvModuleTest(
                     seanceDate = LocalDate.of(2026, 7, 14),
                     rapporteur = "Souwla Soumaoro",
                     president = "Emile Traoré",
-                    pointsForts = "Client fidèle",
-                    pointsFaibles = "Trésorerie tendue",
                     debats =
                         listOf(
                             PvDebat("Retard sur un précédent crédit", "Retard isolé, régularisé", "Favorable sous condition"),
@@ -148,9 +155,12 @@ class PvModuleTest(
         val snapshot = requireNotNull(finalized.snapshot)
         assertEquals("SARL", snapshot.identite.formeJuridique)
         assertEquals(BigDecimal("9.500"), snapshot.conditionsDeBanque.tauxInteretPct)
+        assertEquals(BigDecimal("2.000"), snapshot.conditionsDeBanque.valeurResiduellePct)
         assertEquals(1, snapshot.garanties.size)
         assertEquals("Nantissement matériel", snapshot.garanties.first().description)
         assertEquals(BigDecimal("900.0000"), snapshot.articulation.loanAmount)
+        assertEquals("Client fidèle", snapshot.pointsForts)
+        assertEquals("Trésorerie tendue", snapshot.pointsFaibles)
 
         // The snapshot must survive the dossier's live data changing afterward.
         creditCases.updateIdentity(caseId, com.nimba.creditcase.UpdateClientIdentityCommand(formeJuridique = "SA"))
@@ -171,6 +181,8 @@ class PvModuleTest(
         assertNull(snapshot.conditionsDeBanque.tauxInteretPct)
         assertEquals(0, snapshot.garanties.size)
         assertEquals(BigDecimal("900.0000"), snapshot.articulation.loanAmount)
+        assertNull(snapshot.pointsForts)
+        assertNull(snapshot.pointsFaibles)
     }
 
     @Test
@@ -194,7 +206,7 @@ class PvModuleTest(
         assertFailsWith<ResponseStatusException> {
             pvs.updateDraft(
                 caseId,
-                UpdatePvDraftCommand(LocalDate.of(2026, 7, 13), null, null, null, null, emptyList()),
+                UpdatePvDraftCommand(LocalDate.of(2026, 7, 13), null, null, emptyList()),
             )
         }
         assertFailsWith<ResponseStatusException> { pvs.finalize(caseId) }

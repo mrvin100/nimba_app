@@ -229,6 +229,7 @@ private fun ConditionsDeBanque.toInfo(): ConditionsDeBanqueInfo =
         fraisMiseEnPlacePct = fraisMiseEnPlacePct,
         comEngagementPct = comEngagementPct,
         fraisEtudesPct = fraisEtudesPct,
+        valeurResiduellePct = valeurResiduellePct,
         fraisDivers = fraisDivers,
     )
 
@@ -238,5 +239,6 @@ private fun UpdateConditionsDeBanqueCommand.toConditionsDeBanque(): ConditionsDe
         fraisMiseEnPlacePct = fraisMiseEnPlacePct,
         comEngagementPct = comEngagementPct,
         fraisEtudesPct = fraisEtudesPct,
+        valeurResiduellePct = valeurResiduellePct,
         fraisDivers = fraisDivers?.takeIf { it.isNotBlank() },
     )

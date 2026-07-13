@@ -24,4 +24,10 @@ enum class FaSectionKey(
     CONCLUSION_ARTICULATION(FaPilier.CONCLUSION, FaSectionType.BOUND, "Articulation du financement"),
     CONCLUSION_GARANTIES(FaPilier.CONCLUSION, FaSectionType.BOUND, "Garanties"),
     CONCLUSION_CONDITIONS_BANQUE(FaPilier.CONCLUSION, FaSectionType.BOUND, "Conditions de banque"),
+
+    // The PV's points forts/faibles are BOUND to these two — captured once by
+    // the analyst on the FA, never re-typed by the DCM when drafting the PV
+    // (real-document analysis, 2026-07-13).
+    CONCLUSION_POINTS_FORTS(FaPilier.CONCLUSION, FaSectionType.NARRATIVE, "Points forts"),
+    CONCLUSION_POINTS_FAIBLES(FaPilier.CONCLUSION, FaSectionType.NARRATIVE, "Points faibles"),
 }

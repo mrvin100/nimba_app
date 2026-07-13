@@ -6,6 +6,7 @@ import com.nimba.amortizationschedule.internal.AmortizationScheduleLine
 import com.nimba.amortizationschedule.internal.AmortizationScheduleRepository
 import com.nimba.analysissheet.AnalysisSheetModuleApi
 import com.nimba.analysissheet.CreateAnalysisSheetCommand
+import com.nimba.analysissheet.FaSectionKey
 import com.nimba.creditcase.ContractType
 import com.nimba.creditcase.CreateCreditCaseCommand
 import com.nimba.creditcase.CreditCaseModuleApi
@@ -122,6 +123,8 @@ class PvEndpointTest(
             )
         schedules.saveAndFlush(AmortizationSchedule(caseId, 1, "echeancier.csv", driId).apply { addLine(line) })
         analysisSheets.create(CreateAnalysisSheetCommand(caseId, driId))
+        analysisSheets.updateSection(caseId, FaSectionKey.CONCLUSION_POINTS_FORTS, "Client fidèle")
+        analysisSheets.updateSection(caseId, FaSectionKey.CONCLUSION_POINTS_FAIBLES, "Trésorerie tendue")
         analysisSheets.publish(caseId)
 
         val dcm = member("pvhttp-dcm-${UUID.randomUUID()}@banque.test", Department.DCM)
@@ -153,7 +156,6 @@ class PvEndpointTest(
                 dcm,
                 "/credit-cases/$caseId/pv",
                 """{"seanceDate":"2026-07-14","rapporteur":"Souwla Soumaoro","president":"Emile Traoré",
-                    "pointsForts":"Client fidèle","pointsFaibles":"Trésorerie tendue",
                     "debats":[{"preoccupation":"Retard passé","reponse":"Régularisé","recommandation":"Favorable"}]}""",
             )
         assertEquals(200, updated.statusCode(), updated.body())
@@ -163,6 +165,9 @@ class PvEndpointTest(
         assertEquals(200, finalized.statusCode(), finalized.body())
         assertContains(finalized.body(), "\"status\":\"FINAL\"")
         assertContains(finalized.body(), "\"snapshot\"")
+        // Points forts/faibles come from the FA, not from this PUT above.
+        assertContains(finalized.body(), "Client fidèle")
+        assertContains(finalized.body(), "Trésorerie tendue")
 
         val lockedEdit = put(dcm, "/credit-cases/$caseId/pv", """{"seanceDate":"2026-07-15","debats":[]}""")
         assertEquals(409, lockedEdit.statusCode())
