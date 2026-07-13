@@ -66,12 +66,13 @@ class UpdateConditionsDeBanqueEndpointTest(
                 client,
                 created.id.toString(),
                 """{"tauxInteretPct":9.5,"fraisMiseEnPlacePct":1.5,"comEngagementPct":0.5,"fraisEtudesPct":1,
-                    "fraisDivers":"[{\"label\":\"Notification\",\"montant\":50000}]"}""",
+                    "valeurResiduellePct":2,"fraisDivers":"[{\"label\":\"Notification\",\"montant\":50000}]"}""",
             )
 
         assertEquals(200, response.statusCode(), response.body())
         assertContains(response.body(), "\"tauxInteretPct\":9.5")
         assertContains(response.body(), "\"comEngagementPct\":0.5")
+        assertContains(response.body(), "\"valeurResiduellePct\":2")
         assertContains(response.body(), "Notification")
 
         val fetched =

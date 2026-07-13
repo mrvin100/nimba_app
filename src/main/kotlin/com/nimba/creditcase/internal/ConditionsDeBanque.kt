@@ -15,6 +15,9 @@ data class ConditionsDeBanque(
     var comEngagementPct: BigDecimal? = null,
     @Column(name = "frais_etudes_pct", precision = 6, scale = 3)
     var fraisEtudesPct: BigDecimal? = null,
+    /** The bank-set residual-value percentage (e.g. "2%") — distinct from the TA-derived VR amount in the articulation. */
+    @Column(name = "valeur_residuelle_pct", precision = 6, scale = 3)
+    var valeurResiduellePct: BigDecimal? = null,
     @Column(name = "frais_divers", columnDefinition = "TEXT")
     var fraisDivers: String? = null,
 )

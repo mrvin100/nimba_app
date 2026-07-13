@@ -36,6 +36,10 @@ data class PvDebatRequest(
     val recommandation: String,
 )
 
+/**
+ * Points forts/faibles are deliberately absent: they are read from the FA at
+ * finalization (see [PvSnapshot]), never typed on the PV draft.
+ */
 data class UpdatePvDraftRequest(
     @field:NotNull
     val seanceDate: LocalDate,
@@ -43,10 +47,6 @@ data class UpdatePvDraftRequest(
     val rapporteur: String?,
     @field:Size(max = 200, message = "200 caractères maximum")
     val president: String?,
-    @field:Size(max = 5000, message = "5000 caractères maximum")
-    val pointsForts: String?,
-    @field:Size(max = 5000, message = "5000 caractères maximum")
-    val pointsFaibles: String?,
     @field:Valid
     val debats: List<PvDebatRequest> = emptyList(),
 )
@@ -56,8 +56,6 @@ internal fun UpdatePvDraftRequest.toCommand(): UpdatePvDraftCommand =
         seanceDate = seanceDate,
         rapporteur = rapporteur,
         president = president,
-        pointsForts = pointsForts,
-        pointsFaibles = pointsFaibles,
         debats = debats.map { PvDebat(it.preoccupation, it.reponse, it.recommandation) },
     )
 
@@ -68,8 +66,6 @@ data class PvResponse(
     val seanceDate: LocalDate,
     val rapporteur: String?,
     val president: String?,
-    val pointsForts: String?,
-    val pointsFaibles: String?,
     val debats: List<PvDebat>,
     val createdAt: Instant,
     val updatedAt: Instant,
@@ -85,8 +81,6 @@ internal fun PvInfo.toResponse(): PvResponse =
         seanceDate = seanceDate,
         rapporteur = rapporteur,
         president = president,
-        pointsForts = pointsForts,
-        pointsFaibles = pointsFaibles,
         debats = debats,
         createdAt = createdAt,
         updatedAt = updatedAt,

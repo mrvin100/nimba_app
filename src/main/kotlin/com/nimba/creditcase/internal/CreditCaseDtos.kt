@@ -135,6 +135,8 @@ data class ConditionsDeBanqueRequest(
     val comEngagementPct: BigDecimal? = null,
     @field:Digits(integer = 3, fraction = 3, message = "Pourcentage invalide")
     val fraisEtudesPct: BigDecimal? = null,
+    @field:Digits(integer = 3, fraction = 3, message = "Pourcentage invalide")
+    val valeurResiduellePct: BigDecimal? = null,
     @field:Size(max = 4000, message = "4000 caractères maximum")
     val fraisDivers: String? = null,
 )
@@ -145,6 +147,7 @@ internal fun ConditionsDeBanqueRequest.toCommand(): UpdateConditionsDeBanqueComm
         fraisMiseEnPlacePct = fraisMiseEnPlacePct,
         comEngagementPct = comEngagementPct,
         fraisEtudesPct = fraisEtudesPct,
+        valeurResiduellePct = valeurResiduellePct,
         fraisDivers = fraisDivers,
     )
 

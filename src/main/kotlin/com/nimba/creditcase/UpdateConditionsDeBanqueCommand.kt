@@ -8,5 +8,6 @@ data class UpdateConditionsDeBanqueCommand(
     val fraisMiseEnPlacePct: BigDecimal? = null,
     val comEngagementPct: BigDecimal? = null,
     val fraisEtudesPct: BigDecimal? = null,
+    val valeurResiduellePct: BigDecimal? = null,
     val fraisDivers: String? = null,
 )
