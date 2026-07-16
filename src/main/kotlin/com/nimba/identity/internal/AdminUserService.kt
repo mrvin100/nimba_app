@@ -68,6 +68,14 @@ class AdminUserService(
         return user.toAdminResponse()
     }
 
+    /** Sends a password-reset e-mail so the user can set a new password themselves. */
+    @Transactional
+    fun resetPassword(id: UUID): AdminUserResponse {
+        val user = users.getOrThrow(id, USER_NOT_FOUND)
+        invitations.resetPassword(user)
+        return user.toAdminResponse()
+    }
+
     companion object {
         private const val USER_NOT_FOUND = "Utilisateur introuvable"
     }

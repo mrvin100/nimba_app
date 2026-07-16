@@ -6,7 +6,10 @@ import com.nimba.analysissheet.CreateAnalysisSheetCommand
 import com.nimba.analysissheet.FaSectionKey
 import com.nimba.shared.CurrentUser
 import jakarta.validation.Valid
+import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
+import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -23,6 +26,7 @@ import java.util.UUID
 class AnalysisSheetController(
     private val sheets: AnalysisSheetModuleApi,
     private val amortizationSchedules: AmortizationScheduleModuleApi,
+    private val docxExport: AnalysisSheetDocxExportService,
     private val currentUser: CurrentUser,
 ) {
     @PostMapping
@@ -60,4 +64,19 @@ class AnalysisSheetController(
     fun publish(
         @PathVariable caseId: UUID,
     ): AnalysisSheetResponse = sheets.publish(caseId).toResponse(amortizationSchedules.scheduleSummary(caseId))
+
+    // Exports whatever the dossier currently holds — RAS for anything not yet
+    // captured — so a manager can chase the client for missing information
+    // whether the FA is a draft, published, or not even started yet.
+    @GetMapping("/export/docx")
+    fun exportDocx(
+        @PathVariable caseId: UUID,
+    ): ResponseEntity<ByteArray> {
+        val export = docxExport.export(caseId)
+        return ResponseEntity
+            .ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"${export.filename}\"")
+            .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
+            .body(export.content)
+    }
 }

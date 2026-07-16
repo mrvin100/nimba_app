@@ -59,4 +59,9 @@ class AdminUserController(
         @PathVariable id: UUID,
         @Valid @RequestBody request: UpdateMembershipsRequest,
     ): AdminUserResponse = adminUsers.updateMemberships(id, request)
+
+    @PostMapping("/{id}/reset-password")
+    fun resetPassword(
+        @PathVariable id: UUID,
+    ): AdminUserResponse = adminUsers.resetPassword(id)
 }

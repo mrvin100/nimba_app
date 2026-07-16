@@ -26,15 +26,30 @@ class InvitationService(
     /** Issues an invitation for an already-persisted user and e-mails the link. */
     @Transactional
     fun invite(user: User) {
+        mailer.sendInvitation(user, issueToken(user))
+    }
+
+    /**
+     * Issues a fresh set-password token for an existing user and e-mails it as a
+     * password-reset link (admin-triggered, NIMBA account recovery). Reuses the same
+     * token/link mechanism as the initial invitation; the set-password page and
+     * endpoint are agnostic to which flow issued the token.
+     */
+    @Transactional
+    fun resetPassword(user: User) {
+        mailer.sendPasswordReset(user, issueToken(user))
+    }
+
+    private fun issueToken(user: User): String {
         val token = UUID.randomUUID().toString().replace("-", "") + UUID.randomUUID().toString().replace("-", "")
-        val invitation =
+        invitations.save(
             UserInvitation(
                 userId = requireNotNull(user.id),
                 token = token,
                 expiresAt = Instant.now(clock).plus(appProperties.invitationTtl),
-            )
-        invitations.save(invitation)
-        mailer.sendInvitation(user, token)
+            ),
+        )
+        return token
     }
 
     /** Returns the invited user's identity for the set-password page, or 404/410. */
