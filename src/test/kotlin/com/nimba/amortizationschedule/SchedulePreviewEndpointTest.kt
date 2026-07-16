@@ -1,6 +1,7 @@
 package com.nimba.amortizationschedule
 
 import com.nimba.TestcontainersConfiguration
+import com.nimba.creditcase.ContractType
 import com.nimba.creditcase.CreateCreditCaseCommand
 import com.nimba.creditcase.CreditCaseModuleApi
 import com.nimba.creditcase.ProductType
@@ -51,7 +52,16 @@ class SchedulePreviewEndpointTest(
     }
 
     private fun newCaseId(): UUID =
-        creditCases.createCase(CreateCreditCaseCommand("Client Preview", ProductType.LEASING, "GNF", analystId())).id
+        creditCases
+            .createCase(
+                CreateCreditCaseCommand(
+                    "Client Preview",
+                    ProductType.LEASING,
+                    "GNF",
+                    analystId(),
+                    contractType = ContractType.AVEC_CONTRAT,
+                ),
+            ).id
 
     private fun multipartBody(
         filename: String,

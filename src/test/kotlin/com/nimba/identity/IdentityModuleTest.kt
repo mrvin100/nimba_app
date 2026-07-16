@@ -11,6 +11,7 @@ import org.springframework.dao.DataIntegrityViolationException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 @Import(TestcontainersConfiguration::class)
 @SpringBootTest
@@ -55,5 +56,19 @@ class IdentityModuleTest(
                 ),
             )
         }
+    }
+
+    @Test
+    fun `resolves a user's directions and a direction's members through the module API`() {
+        val user =
+            users.saveAndFlush(
+                User(fullName = "Membre Comité", email = "membre-comite@banque.test", passwordHash = "hash").apply {
+                    assign(Department.COMITE, DepartmentRole.MEMBER)
+                },
+            )
+
+        assertEquals(setOf(Department.COMITE), identity.departmentsOf(requireNotNull(user.id)))
+        assertTrue(identity.membersOf(Department.COMITE).any { it.id == user.id })
+        assertTrue(identity.membersOf(Department.DRC).none { it.id == user.id })
     }
 }

@@ -10,4 +10,6 @@ data class UpdateCreditCaseCommand(
     val currency: String,
     /** The client's account number at the bank (printed on the traités). */
     val accountNumber: String? = null,
+    /** Required when [productType] is LEASING; must be null otherwise. */
+    val contractType: ContractType? = null,
 )

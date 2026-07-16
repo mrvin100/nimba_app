@@ -1,8 +1,10 @@
 package com.nimba.creditcase.internal
 
+import com.nimba.creditcase.ContractType
 import com.nimba.creditcase.CreditCaseStatus
 import com.nimba.creditcase.ProductType
 import jakarta.persistence.Column
+import jakarta.persistence.Embedded
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
@@ -30,6 +32,10 @@ class CreditCase(
     @Enumerated(EnumType.STRING)
     @Column(name = "product_type", nullable = false)
     var productType: ProductType,
+    /** Only set when [productType] is LEASING; null for every other product. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "contract_type")
+    var contractType: ContractType? = null,
     @Column(name = "currency", nullable = false)
     var currency: String,
     @Column(name = "created_by", nullable = false, updatable = false)
@@ -55,4 +61,29 @@ class CreditCase(
     /** When an administrator archived the case; null while it is active. */
     @Column(name = "archived_at")
     var archivedAt: Instant? = null
+
+    /**
+     * Descriptive client detail reused across the FA/PV/FMP; see [ClientIdentity].
+     * Nullable because Hibernate reloads an `@Embedded` value object as null (not an
+     * empty instance) once every one of its columns is null — true for every case
+     * until the DRI captures the first identity field. Read through
+     * [CreditCase.identityOrEmpty], never this property directly.
+     */
+    @Embedded
+    var clientIdentity: ClientIdentity? = ClientIdentity()
+
+    /**
+     * Bank-set financing terms reused across the FA/PV/FMP; see [ConditionsDeBanque].
+     * Nullable for the same reason as [clientIdentity] (Hibernate's all-columns-null
+     * embeddable gotcha). Read through [CreditCase.conditionsOrEmpty], never this
+     * property directly.
+     */
+    @Embedded
+    var conditionsDeBanque: ConditionsDeBanque? = ConditionsDeBanque()
 }
+
+/** [CreditCase.clientIdentity], defaulting the "nothing captured yet" case to an empty value object. */
+internal fun CreditCase.identityOrEmpty(): ClientIdentity = clientIdentity ?: ClientIdentity()
+
+/** [CreditCase.conditionsDeBanque], defaulting the "nothing captured yet" case to an empty value object. */
+internal fun CreditCase.conditionsOrEmpty(): ConditionsDeBanque = conditionsDeBanque ?: ConditionsDeBanque()

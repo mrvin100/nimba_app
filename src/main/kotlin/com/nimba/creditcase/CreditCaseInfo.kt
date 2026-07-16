@@ -13,6 +13,8 @@ data class CreditCaseInfo(
     val caseNumber: String,
     val clientName: String,
     val productType: ProductType,
+    /** Set only when [productType] is LEASING. */
+    val contractType: ContractType? = null,
     val currency: String,
     val status: CreditCaseStatus,
     val createdBy: UUID,
@@ -21,4 +23,6 @@ data class CreditCaseInfo(
     val accountNumber: String? = null,
     /** When an administrator archived the case; null while it is active. */
     val archivedAt: Instant? = null,
+    val clientIdentity: ClientIdentityInfo = ClientIdentityInfo(),
+    val conditionsDeBanque: ConditionsDeBanqueInfo = ConditionsDeBanqueInfo(),
 )

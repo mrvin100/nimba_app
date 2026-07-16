@@ -1,6 +1,7 @@
 package com.nimba.amortizationschedule
 
 import com.nimba.TestcontainersConfiguration
+import com.nimba.creditcase.ContractType
 import com.nimba.creditcase.CreateCreditCaseCommand
 import com.nimba.creditcase.CreditCaseModuleApi
 import com.nimba.creditcase.ProductType
@@ -95,7 +96,16 @@ class TradeExportEndpointTest(
     @Test
     fun `exports the active trades as a downloadable CSV`() {
         val client = authenticatedClient()
-        val created = creditCases.createCase(CreateCreditCaseCommand("ETS OC ET FRERES", ProductType.LEASING, "GNF", analystId()))
+        val created =
+            creditCases.createCase(
+                CreateCreditCaseCommand(
+                    "ETS OC ET FRERES",
+                    ProductType.LEASING,
+                    "GNF",
+                    analystId(),
+                    contractType = ContractType.AVEC_CONTRAT,
+                ),
+            )
         uploadValidAndGenerate(client, created.id)
 
         val response = export(client, created.id)
@@ -115,7 +125,14 @@ class TradeExportEndpointTest(
         val client = authenticatedClient()
         val created =
             creditCases.createCase(
-                CreateCreditCaseCommand("ETS OC ET FRERES", ProductType.LEASING, "GNF", analystId(), "0102386501-90"),
+                CreateCreditCaseCommand(
+                    "ETS OC ET FRERES",
+                    ProductType.LEASING,
+                    "GNF",
+                    analystId(),
+                    "0102386501-90",
+                    contractType = ContractType.AVEC_CONTRAT,
+                ),
             )
         uploadValidAndGenerate(client, created.id)
 
@@ -175,7 +192,17 @@ class TradeExportEndpointTest(
     @Test
     fun `returns 404 when there are no active trades to export`() {
         val client = authenticatedClient()
-        val caseId = creditCases.createCase(CreateCreditCaseCommand("Sans Trades", ProductType.LEASING, "GNF", analystId())).id
+        val caseId =
+            creditCases
+                .createCase(
+                    CreateCreditCaseCommand(
+                        "Sans Trades",
+                        ProductType.LEASING,
+                        "GNF",
+                        analystId(),
+                        contractType = ContractType.AVEC_CONTRAT,
+                    ),
+                ).id
 
         val response = export(client, caseId)
 
@@ -185,7 +212,11 @@ class TradeExportEndpointTest(
     @Test
     fun `rejects export without an authenticated session`() {
         val anonymous = HttpClient.newBuilder().cookieHandler(CookieManager()).build()
-        val caseId = creditCases.createCase(CreateCreditCaseCommand("Anon", ProductType.LEASING, "GNF", analystId())).id
+        val caseId =
+            creditCases
+                .createCase(
+                    CreateCreditCaseCommand("Anon", ProductType.LEASING, "GNF", analystId(), contractType = ContractType.AVEC_CONTRAT),
+                ).id
 
         val response = export(anonymous, caseId)
 

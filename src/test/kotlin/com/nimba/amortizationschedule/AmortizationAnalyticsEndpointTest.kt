@@ -1,6 +1,7 @@
 package com.nimba.amortizationschedule
 
 import com.nimba.TestcontainersConfiguration
+import com.nimba.creditcase.ContractType
 import com.nimba.creditcase.CreateCreditCaseCommand
 import com.nimba.creditcase.CreditCaseModuleApi
 import com.nimba.creditcase.ProductType
@@ -84,7 +85,11 @@ class AmortizationAnalyticsEndpointTest(
     @Test
     fun `overview returns coherent server-computed figures in one response`() {
         val client = authenticatedClient()
-        val caseId = creditCases.createCase(CreateCreditCaseCommand("Analytics", ProductType.LEASING, "GNF", analystId())).id
+        val caseId =
+            creditCases
+                .createCase(
+                    CreateCreditCaseCommand("Analytics", ProductType.LEASING, "GNF", analystId(), contractType = ContractType.AVEC_CONTRAT),
+                ).id
         upload(client, caseId)
 
         val response = get(client, "${base(caseId)}/overview")
@@ -118,7 +123,17 @@ class AmortizationAnalyticsEndpointTest(
     @Test
     fun `overview narrows the chart to the requested date range`() {
         val client = authenticatedClient()
-        val caseId = creditCases.createCase(CreateCreditCaseCommand("Analytics Range", ProductType.LEASING, "GNF", analystId())).id
+        val caseId =
+            creditCases
+                .createCase(
+                    CreateCreditCaseCommand(
+                        "Analytics Range",
+                        ProductType.LEASING,
+                        "GNF",
+                        analystId(),
+                        contractType = ContractType.AVEC_CONTRAT,
+                    ),
+                ).id
         upload(client, caseId)
 
         val full = json.readTree(get(client, "${base(caseId)}/overview").body())
@@ -136,7 +151,17 @@ class AmortizationAnalyticsEndpointTest(
     @Test
     fun `table is paginated and filterable by payment status`() {
         val client = authenticatedClient()
-        val caseId = creditCases.createCase(CreateCreditCaseCommand("Analytics Table", ProductType.LEASING, "GNF", analystId())).id
+        val caseId =
+            creditCases
+                .createCase(
+                    CreateCreditCaseCommand(
+                        "Analytics Table",
+                        ProductType.LEASING,
+                        "GNF",
+                        analystId(),
+                        contractType = ContractType.AVEC_CONTRAT,
+                    ),
+                ).id
         upload(client, caseId)
 
         val page = json.readTree(get(client, "${base(caseId)}/table?page=0&size=10").body())
@@ -151,7 +176,17 @@ class AmortizationAnalyticsEndpointTest(
     @Test
     fun `table sorts on the requested column in both directions`() {
         val client = authenticatedClient()
-        val caseId = creditCases.createCase(CreateCreditCaseCommand("Analytics Tri", ProductType.LEASING, "GNF", analystId())).id
+        val caseId =
+            creditCases
+                .createCase(
+                    CreateCreditCaseCommand(
+                        "Analytics Tri",
+                        ProductType.LEASING,
+                        "GNF",
+                        analystId(),
+                        contractType = ContractType.AVEC_CONTRAT,
+                    ),
+                ).id
         upload(client, caseId)
 
         val byCapitalDesc = json.readTree(get(client, "${base(caseId)}/table?sortBy=CAPITAL&sort=desc&size=100").body())
@@ -170,7 +205,17 @@ class AmortizationAnalyticsEndpointTest(
     @Test
     fun `overview returns 404 when no schedule was imported`() {
         val client = authenticatedClient()
-        val caseId = creditCases.createCase(CreateCreditCaseCommand("Sans Échéancier", ProductType.LEASING, "GNF", analystId())).id
+        val caseId =
+            creditCases
+                .createCase(
+                    CreateCreditCaseCommand(
+                        "Sans Échéancier",
+                        ProductType.LEASING,
+                        "GNF",
+                        analystId(),
+                        contractType = ContractType.AVEC_CONTRAT,
+                    ),
+                ).id
 
         assertEquals(404, get(client, "${base(caseId)}/overview").statusCode())
     }

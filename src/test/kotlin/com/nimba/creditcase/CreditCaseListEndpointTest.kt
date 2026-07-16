@@ -48,7 +48,7 @@ class CreditCaseListEndpointTest(
         val response =
             client.send(
                 req("/api/v1/credit-cases")
-                    .POST(body("""{"clientName":"$clientName","productType":"LEASING","currency":"GNF"}"""))
+                    .POST(body("""{"clientName":"$clientName","productType":"LEASING","contractType":"AVEC_CONTRAT","currency":"GNF"}"""))
                     .build(),
                 HttpResponse.BodyHandlers.ofString(),
             )
