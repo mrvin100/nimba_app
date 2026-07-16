@@ -74,12 +74,16 @@ spring:
   flyway:
     enabled: true
   datasource:
-    # The POSTGRES_* variables are the SAME ones docker-compose.yml uses, so the
-    # database the container creates and the database the app connects to cannot
-    # drift. Defaults make a fresh clone run with zero configuration; override the
-    # variables (host, credentials) for staging and production, which run on the
-    # bank's internal infrastructure (on-premise, mono-tenant — see NIMBA-5).
-    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5433}/${POSTGRES_DB:nimba}
+    # Local/dev: the URL is built from the POSTGRES_* variables — the SAME ones
+    # docker-compose.yml uses, so the database the container creates and the one the
+    # app connects to cannot drift. Defaults make a fresh clone run with zero config.
+    #
+    # Managed Postgres (Neon on Render, etc.) gives you a single ready-made JDBC
+    # connection string; set DATABASE_URL to that whole string and it is used
+    # verbatim (do NOT split it into POSTGRES_HOST/PORT). Credentials still come from
+    # POSTGRES_USER/POSTGRES_PASSWORD. Example DATABASE_URL:
+    #   jdbc:postgresql://ep-xxx-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require
+    url: ${DATABASE_URL:jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5433}/${POSTGRES_DB:nimba}}
     username: ${POSTGRES_USER:nimba}
     password: ${POSTGRES_PASSWORD:nimba}
     hikari:
@@ -114,7 +118,9 @@ auth:
 nimba:
   app:
     # Public base URL of the frontend, used to build the set-password link in
-    # invitation e-mails (e.g. {base}/set-password?token=...).
+    # invitation e-mails (e.g. {base}/set-password?token=...). Set
+    # APP_FRONTEND_BASE_URL to the deployed frontend (e.g. https://dmba.vercel.app)
+    # in staging/production; the localhost default is for local dev only.
     frontend-base-url: ${APP_FRONTEND_BASE_URL:http://localhost:3000}
     # How long an invitation / set-password token stays valid (ISO-8601 duration).
     invitation-ttl: ${INVITATION_TTL:P7D}
@@ -127,6 +133,12 @@ nimba:
     # Feature switch: when false, invitations are persisted but no e-mail is sent
     # (useful for tests and environments without an SMTP relay).
     enabled: ${MAIL_ENABLED:true}
+    # Fallback sender used until an admin sets the organisation's own sender on the
+    # org-settings screen. In production this MUST be an address on a domain
+    # verified with the mail provider (e.g. no-reply@contact.mrvin100.de), otherwise
+    # Resend rejects the message. Defaults to the non-routable dev placeholder.
+    from: ${MAIL_FROM:no-reply@nimba.local}
+    from-name: ${MAIL_FROM_NAME:Nimba}
     # Delivery transport: `smtp` (default) uses the spring.mail relay above
     # (local Mailpit); `resend` uses the Resend HTTPS API for hosts that block
     # outbound SMTP (Render, Fly). When `resend`, set nimba.mail.resend.api-key.
@@ -137,11 +149,16 @@ nimba:
       api-key: ${RESEND_API_KEY:}
       base-url: ${RESEND_BASE_URL:https://api.resend.com}
   minio:
-    # Object storage for user avatars. Defaults target the docker-compose MinIO;
-    # credentials/bucket reuse the same MINIO_* variables as the container.
+    # S3-compatible object storage for avatars and the organisation logo. Defaults
+    # target the local docker-compose MinIO. The app authenticates with its OWN
+    # access/secret key (MINIO_ACCESS_KEY / MINIO_SECRET_KEY) — deliberately NOT the
+    # container's root user, so production can point at a hosted S3 (AWS S3,
+    # Cloudflare R2, hosted MinIO, …) by setting MINIO_ENDPOINT plus those keys,
+    # with no dependency on any local container. Locally the two keys match the
+    # container's MINIO_ROOT_USER / MINIO_ROOT_PASSWORD.
     endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
-    access-key: ${MINIO_ROOT_USER:nimba}
-    secret-key: ${MINIO_ROOT_PASSWORD:nimba-secret}
+    access-key: ${MINIO_ACCESS_KEY:nimba}
+    secret-key: ${MINIO_SECRET_KEY:nimba-secret}
     bucket: ${MINIO_BUCKET:nimba}
 
 storage:

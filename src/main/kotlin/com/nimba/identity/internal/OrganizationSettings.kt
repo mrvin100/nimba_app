@@ -25,7 +25,7 @@ class OrganizationSettings {
     var senderName: String = "Nimba"
 
     @Column(name = "sender_email", nullable = false)
-    var senderEmail: String = "no-reply@nimba.local"
+    var senderEmail: String = UNCONFIGURED_SENDER_EMAIL
 
     /** Object-storage key of the organisation logo, or null when none is configured. */
     @Column(name = "logo_key")
@@ -40,5 +40,13 @@ class OrganizationSettings {
 
     companion object {
         const val SINGLETON_ID = 1
+
+        /**
+         * Placeholder sender seeded by migration V7. While the settings row still
+         * holds this value the organisation sender is considered "not configured",
+         * so [InvitationMailer] falls back to the environment default (`MAIL_FROM`).
+         * It is a non-routable domain on purpose — real deployments must override it.
+         */
+        const val UNCONFIGURED_SENDER_EMAIL = "no-reply@nimba.local"
     }
 }
