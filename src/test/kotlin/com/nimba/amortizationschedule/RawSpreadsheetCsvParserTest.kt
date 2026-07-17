@@ -1,6 +1,7 @@
 package com.nimba.amortizationschedule
 
 import com.nimba.amortizationschedule.internal.AmortizationScheduleCsvParser
+import com.nimba.amortizationschedule.internal.ParseResult
 import org.junit.jupiter.api.Test
 import java.io.File
 import java.math.BigDecimal
@@ -22,6 +23,21 @@ class RawSpreadsheetCsvParserTest {
     fun `parses the raw ETS OC ET FRERES spreadsheet export end to end`() {
         val result = parser.parse(File("docs/examples/ta-oc-et-freres-brut.csv").inputStream())
 
+        assertParsesTheExpectedSchedule(result)
+    }
+
+    @Test
+    fun `parses the same export saved by an older Excel in Windows-1252 instead of UTF-8`() {
+        // Older Excel's "CSV (comma delimited)" export has no UTF-8 option: it writes
+        // accented headers like "N°" and "dû" in the machine's ANSI codepage. The
+        // bytes differ from the UTF-8 fixture above but the content is identical, so the
+        // parsed schedule must be too.
+        val result = parser.parse(File("docs/examples/ta-oc-et-freres-brut-cp1252.csv").inputStream())
+
+        assertParsesTheExpectedSchedule(result)
+    }
+
+    private fun assertParsesTheExpectedSchedule(result: ParseResult) {
         assertFalse(result.hasErrors, "raw export should parse cleanly: ${result.errors}")
         assertEquals(25, result.lines.size, "24 échéances + VR")
         assertEquals(1, result.lines.count { it.isResidualValue })

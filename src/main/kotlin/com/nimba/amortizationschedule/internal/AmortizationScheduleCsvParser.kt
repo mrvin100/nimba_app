@@ -3,12 +3,12 @@ package com.nimba.amortizationschedule.internal
 import org.apache.commons.csv.CSVFormat
 import org.apache.commons.csv.CSVRecord
 import org.springframework.stereotype.Component
-import java.io.BufferedReader
 import java.io.InputStream
-import java.io.InputStreamReader
 import java.io.StringReader
 import java.math.BigDecimal
+import java.nio.ByteBuffer
 import java.nio.charset.CharacterCodingException
+import java.nio.charset.Charset
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.text.Normalizer
@@ -30,10 +30,20 @@ import java.time.temporal.ChronoUnit
  * thousands separators are stripped only when unambiguous — so a value is never
  * silently mis-read. Cross-field arithmetic consistency remains a separate concern
  * (NIMBA-16).
+ *
+ * The file is expected to be UTF-8 (with or without a BOM), the encoding of every
+ * modern "CSV UTF-8" export. Older Excel versions instead save "CSV (comma
+ * delimited)" / "CSV (délimité par des virgules)" in the machine's ANSI codepage —
+ * Windows-1252 for a French/Western-European install — which only differs from
+ * UTF-8 once an accented character appears. When strict UTF-8 decoding fails, the
+ * same bytes are retried as Windows-1252 before the file is rejected, so analysts on
+ * an older Excel are not forced to re-save their export to upload it.
  */
 @Component
 class AmortizationScheduleCsvParser {
     companion object {
+        private val LEGACY_EXCEL_CHARSET: Charset = Charset.forName("windows-1252")
+
         // Internal column -> accepted header spellings (compared after normalisation:
         // lower-case, accents removed, non-alphanumerics dropped).
         private val COLUMN_ALIASES: Map<String, Set<String>> =
@@ -70,15 +80,10 @@ class AmortizationScheduleCsvParser {
     }
 
     fun parse(input: InputStream): ParseResult {
-        val decoder =
-            StandardCharsets.UTF_8
-                .newDecoder()
-                .onMalformedInput(CodingErrorAction.REPORT)
-                .onUnmappableCharacter(CodingErrorAction.REPORT)
         val lines = mutableListOf<ParsedScheduleLine>()
         val errors = mutableListOf<ScheduleError>()
         try {
-            val content = BufferedReader(InputStreamReader(input, decoder)).use { it.readText() }
+            val content = decode(input.readAllBytes())
             val delimiter = if (firstLine(content).count { it == ',' } > firstLine(content).count { it == ';' }) ',' else ';'
             // When the field delimiter is a comma, any comma inside a (quoted) amount can
             // only be a thousands separator — a file that used ',' as its decimal mark
@@ -128,13 +133,45 @@ class AmortizationScheduleCsvParser {
             }
         } catch (ex: Exception) {
             return if (isEncodingProblem(ex)) {
-                fatal("Le fichier n'est pas encodé en UTF-8 valide. Réenregistrez-le en UTF-8 puis réessayez.")
+                fatal(
+                    "Le fichier n'est encodé ni en UTF-8 ni dans l'encodage Windows (ANSI) " +
+                        "d'Excel. Réenregistrez-le en UTF-8 puis réessayez.",
+                )
             } else {
                 fatal("Le fichier n'a pas pu être lu comme un CSV valide.")
             }
         }
         return ParseResult(lines, errors)
     }
+
+    /**
+     * Decodes the raw bytes as UTF-8, falling back to Windows-1252 — the codepage an
+     * older Excel writes a "CSV (comma delimited)" export in — when the bytes are not
+     * valid UTF-8. Windows-1252 assigns a character to almost every byte value, so this
+     * fallback essentially always succeeds; only bytes that are invalid under both
+     * encodings surface as an unreadable file.
+     */
+    private fun decode(bytes: ByteArray): String =
+        try {
+            decodeStrict(bytes, StandardCharsets.UTF_8)
+        } catch (utf8Error: CharacterCodingException) {
+            try {
+                decodeStrict(bytes, LEGACY_EXCEL_CHARSET)
+            } catch (_: CharacterCodingException) {
+                throw utf8Error
+            }
+        }
+
+    private fun decodeStrict(
+        bytes: ByteArray,
+        charset: Charset,
+    ): String =
+        charset
+            .newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+            .decode(ByteBuffer.wrap(bytes))
+            .toString()
 
     /** Column-name -> index map when the record is the table header, else null. */
     private fun columnIndex(record: CSVRecord): Map<String, Int>? {
