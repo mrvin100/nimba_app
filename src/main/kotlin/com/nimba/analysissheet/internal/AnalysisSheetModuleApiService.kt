@@ -5,6 +5,7 @@ import com.nimba.analysissheet.AnalysisSheetInfo
 import com.nimba.analysissheet.AnalysisSheetModuleApi
 import com.nimba.analysissheet.AnalysisSheetStatus
 import com.nimba.analysissheet.CreateAnalysisSheetCommand
+import com.nimba.analysissheet.FaSectionDefaults
 import com.nimba.analysissheet.FaSectionInfo
 import com.nimba.analysissheet.FaSectionKey
 import com.nimba.analysissheet.FaSectionRegistry
@@ -62,7 +63,15 @@ class AnalysisSheetModuleApiService(
         val stored = sectionsRepo.findByAnalysisSheetId(requireNotNull(sheet.id)).associateBy { it.sectionKey }
         return keys.map { key ->
             val row = stored[key]
-            FaSectionInfo(key, key.pilier, key.type, key.label, row?.contentJson, row?.updatedAt)
+            FaSectionInfo(
+                key,
+                key.pilier,
+                key.type,
+                key.label,
+                row?.contentJson,
+                row?.updatedAt,
+                FaSectionDefaults.defaultContentFor(key),
+            )
         }
     }
 
@@ -86,7 +95,15 @@ class AnalysisSheetModuleApiService(
         row.contentJson = contentJson
         row.updatedAt = Instant.now()
         val saved = sectionsRepo.save(row)
-        return FaSectionInfo(key, key.pilier, key.type, key.label, saved.contentJson, saved.updatedAt)
+        return FaSectionInfo(
+            key,
+            key.pilier,
+            key.type,
+            key.label,
+            saved.contentJson,
+            saved.updatedAt,
+            FaSectionDefaults.defaultContentFor(key),
+        )
     }
 
     @Transactional

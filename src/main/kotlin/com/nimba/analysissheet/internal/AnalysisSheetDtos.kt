@@ -48,6 +48,8 @@ data class FaSectionResponse(
     val label: String,
     val contentJson: String?,
     val updatedAt: Instant?,
+    /** Prefill for sections that start populated (e.g. §4.1's risk matrix) — the editor seeds from it. */
+    val defaultContentJson: String?,
 )
 
 internal fun FaSectionInfo.toResponse(): FaSectionResponse =
@@ -58,4 +60,5 @@ internal fun FaSectionInfo.toResponse(): FaSectionResponse =
         label = label,
         contentJson = contentJson,
         updatedAt = updatedAt,
+        defaultContentJson = defaultContentJson,
     )
