@@ -23,6 +23,7 @@ import java.util.UUID
 class AnalysisSheetModuleApiService(
     private val sheets: AnalysisSheetRepository,
     private val sectionsRepo: AnalysisSheetSectionRepository,
+    private val imagesRepo: AnalysisSheetImageRepository,
     private val creditCases: CreditCaseModuleApi,
     private val amortizationSchedules: AmortizationScheduleModuleApi,
 ) : AnalysisSheetModuleApi {
@@ -60,7 +61,12 @@ class AnalysisSheetModuleApiService(
     override fun sections(creditCaseId: UUID): List<FaSectionInfo> {
         val sheet = sheets.findByCreditCaseId(creditCaseId) ?: return emptyList()
         val keys = FaSectionRegistry.sectionsFor(sheet.faVariant)
-        val stored = sectionsRepo.findByAnalysisSheetId(requireNotNull(sheet.id)).associateBy { it.sectionKey }
+        val sheetId = requireNotNull(sheet.id)
+        val stored = sectionsRepo.findByAnalysisSheetId(sheetId).associateBy { it.sectionKey }
+        val imagesByKey =
+            imagesRepo
+                .findByAnalysisSheetIdOrderByUploadedAt(sheetId)
+                .groupBy({ it.sectionKey }, { it.toInfo() })
         return keys.map { key ->
             val row = stored[key]
             FaSectionInfo(
@@ -71,6 +77,7 @@ class AnalysisSheetModuleApiService(
                 row?.contentJson,
                 row?.updatedAt,
                 FaSectionDefaults.defaultContentFor(key),
+                imagesByKey[key].orEmpty(),
             )
         }
     }

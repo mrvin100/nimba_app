@@ -107,6 +107,10 @@ kover {
                     "com.nimba.guarantee.internal.GuaranteeStorageProperties",
                     "com.nimba.guarantee.internal.GuaranteeAttachmentStorage",
                     "com.nimba.guarantee.internal.GuaranteeAttachmentService",
+                    "com.nimba.analysissheet.internal.AnalysisSheetStorageProperties",
+                    "com.nimba.analysissheet.internal.AnalysisSheetImageStorage",
+                    "com.nimba.analysissheet.internal.AnalysisSheetImageService",
+                    "com.nimba.analysissheet.internal.AnalysisSheetImageObject",
                 )
             }
         }
