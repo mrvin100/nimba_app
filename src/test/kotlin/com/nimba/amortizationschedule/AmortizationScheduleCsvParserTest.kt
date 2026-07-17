@@ -4,6 +4,7 @@ import com.nimba.amortizationschedule.internal.AmortizationScheduleCsvParser
 import org.junit.jupiter.api.Test
 import java.io.File
 import java.math.BigDecimal
+import java.nio.charset.Charset
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -142,12 +143,32 @@ class AmortizationScheduleCsvParserTest {
     }
 
     @Test
-    fun `reports a clear error for non UTF-8 content rather than crashing`() {
-        val bytes = "$header\n".toByteArray(Charsets.UTF_8) + byteArrayOf(0xFF.toByte(), 0xFE.toByte())
+    fun `reports a clear error for content that is neither UTF-8 nor Windows-1252`() {
+        // 0x81 is undefined in both UTF-8 and Windows-1252 (the legacy Excel fallback),
+        // so this is genuinely unreadable rather than just an older export.
+        val bytes = "$header\n".toByteArray(Charsets.UTF_8) + byteArrayOf(0x81.toByte())
 
         val result = parser.parse(bytes.inputStream())
 
         assertTrue(result.errors.any { it.message.contains("UTF-8") }, "${result.errors}")
+    }
+
+    @Test
+    fun `falls back to Windows-1252 for a comma-delimited file saved by an older Excel`() {
+        // Older Excel's "CSV (comma delimited)" export has no UTF-8 option: it writes
+        // accented headers like "N°" and "Capital restant dû" in the machine's ANSI
+        // codepage (Windows-1252 in a French/Western European install) rather than
+        // UTF-8, so "°" and "û" are single bytes that are not valid UTF-8 on their own.
+        val accentedHeader =
+            "N°,Date,Interet,Equipement,Assurance,Tracking,Immatriculation,Capital,Loyer HT,Taxes,Loyer TTC,Capital restant dû"
+        val row = "1,01/05/2026,100,200,300,400,500,1400,1500,100,1600,5000"
+        val bytes = "$accentedHeader\n$row".toByteArray(Charset.forName("windows-1252"))
+
+        val result = parser.parse(bytes.inputStream())
+
+        assertFalse(result.hasErrors, "${result.errors}")
+        assertEquals(1, result.lines.size)
+        assertEquals(BigDecimal("5000"), result.lines.single().capitalRestantDu)
     }
 
     @Test

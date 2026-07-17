@@ -6,7 +6,11 @@ et les analystes DRI partagent cette référence unique. Document métier comple
 
 ## Conventions
 
-- **Encodage :** UTF-8 (un encodage invalide est rejeté avec un message explicite).
+- **Encodage :** UTF-8. Si le fichier n'est pas un UTF-8 valide, le parseur retente en
+  Windows-1252 — l'encodage produit par l'export « CSV (délimité par des virgules) » des
+  versions d'Excel antérieures à l'option UTF-8 — afin qu'un analyste sur un poste plus
+  ancien n'ait pas à ré-enregistrer son fichier. Un fichier qui n'est valide dans aucun
+  des deux encodages est rejeté avec un message explicite.
 - **Séparateur de colonnes :** point-virgule `;`. Choisi parce que les montants peuvent
   contenir une virgule décimale ou des séparateurs selon la saisie ; la virgule est donc
   exclue comme séparateur de colonnes.
