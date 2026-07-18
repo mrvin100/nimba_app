@@ -119,6 +119,13 @@ class AnalysisSheetController(
         @PathVariable caseId: UUID,
     ): AnalysisSheetResponse = sheets.publish(caseId).toResponse(amortizationSchedules.scheduleSummary(caseId))
 
+    // Only while the dossier was never submitted to review — the FA then
+    // toggles freely between draft and published on the DRI side.
+    @PostMapping("/unpublish")
+    fun unpublish(
+        @PathVariable caseId: UUID,
+    ): AnalysisSheetResponse = sheets.unpublish(caseId).toResponse(amortizationSchedules.scheduleSummary(caseId))
+
     // Exports whatever the dossier currently holds — RAS for anything not yet
     // captured — so a manager can chase the client for missing information
     // whether the FA is a draft, published, or not even started yet.

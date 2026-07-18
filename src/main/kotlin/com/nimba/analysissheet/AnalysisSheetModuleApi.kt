@@ -35,6 +35,13 @@ interface AnalysisSheetModuleApi {
     fun publish(creditCaseId: UUID): AnalysisSheetInfo
 
     /**
+     * The DRI takes a published FA back to draft (PUBLISHED → DRAFT). Only
+     * allowed while the dossier was never submitted to review ([FaUnpublishGate]);
+     * 409 otherwise or when the FA is not published.
+     */
+    fun unpublish(creditCaseId: UUID): AnalysisSheetInfo
+
+    /**
      * Reopens a published FA for editing (PUBLISHED → DRAFT), called by the workflow
      * module when a dossier is returned to the DRI for changes. A no-op when the case
      * has no FA or it is already a draft.

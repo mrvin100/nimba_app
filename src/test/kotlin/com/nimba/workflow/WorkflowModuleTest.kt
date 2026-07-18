@@ -102,9 +102,15 @@ class WorkflowModuleTest(
         assertEquals(WorkflowStatus.EN_REVUE_DRC, workflow.act(caseId, dcm, WorkflowAction.APPROVE, "OK crédit").status)
         assertEquals(1L, notifications.unreadCount(drc), "DCM approval must notify the DRC")
 
-        assertEquals(WorkflowStatus.PRET_POUR_COMITE, workflow.act(caseId, drc, WorkflowAction.APPROVE, null).status)
-        assertEquals(1L, notifications.unreadCount(comite1), "DRC approval must notify every comité member")
-        assertEquals(1L, notifications.unreadCount(comite2), "DRC approval must notify every comité member")
+        // The DRC's avis favorable goes straight to the DCM verification — the
+        // DRC analyses the dossier only once.
+        assertEquals(WorkflowStatus.EN_VERIFICATION_DCM, workflow.act(caseId, drc, WorkflowAction.APPROVE, null).status)
+        assertEquals(2L, notifications.unreadCount(dcm), "the DRC's avis favorable must notify the DCM")
+
+        // Only the DCM sends the dossier to the comité.
+        assertEquals(WorkflowStatus.PRET_POUR_COMITE, workflow.act(caseId, dcm, WorkflowAction.SEND_TO_COMITE, null).status)
+        assertEquals(1L, notifications.unreadCount(comite1), "the envoi comité must notify every comité member")
+        assertEquals(1L, notifications.unreadCount(comite2), "the envoi comité must notify every comité member")
 
         val afterFirst = workflow.act(caseId, comite1, WorkflowAction.APPROVE, null)
         assertEquals(WorkflowStatus.PRET_POUR_COMITE, afterFirst.status)
@@ -115,10 +121,36 @@ class WorkflowModuleTest(
         assertEquals(WorkflowStatus.APPROUVE, afterSecond.status)
         assertEquals(2, afterSecond.comiteApprovals)
         assertTrue(afterSecond.timeline.any { it.action == WorkflowAction.SUBMIT })
-        // dcm already holds the SUBMIT notification (never read in this test); the
-        // comité outcome adds a second one.
-        assertEquals(2L, notifications.unreadCount(dcm), "the comité outcome must notify the DCM")
+        // dcm holds SUBMIT + avis favorable notifications (never read in this
+        // test); the comité outcome adds a third one.
+        assertEquals(3L, notifications.unreadCount(dcm), "the comité outcome must notify the DCM")
         assertEquals(1L, notifications.unreadCount(dri), "the comité outcome must notify the DRI")
+    }
+
+    @Test
+    fun `DRC observations send the dossier through the corrections lane`() {
+        val caseId = readyDossier()
+        val dri = memberId("wf-drc-dri@banque.test", Department.DRI)
+        val dcm = memberId("wf-drc-dcm@banque.test", Department.DCM)
+        val drc = memberId("wf-drc-drc@banque.test", Department.DRC)
+
+        workflow.act(caseId, dri, WorkflowAction.SUBMIT, null)
+        workflow.act(caseId, dcm, WorkflowAction.APPROVE, null)
+
+        val returned = workflow.act(caseId, drc, WorkflowAction.REQUEST_CHANGES, "Compléter la logistique")
+        assertEquals(WorkflowStatus.CORRECTIONS_DRI, returned.status)
+        assertEquals(AnalysisSheetStatus.DRAFT, analysisSheets.findByCase(caseId)?.status, "the FA must reopen for the DRI")
+        assertEquals(1L, notifications.unreadCount(dri), "DRC observations must notify the DRI")
+        assertEquals(2L, notifications.unreadCount(dcm), "the DCM must receive a copy of the DRC observations")
+
+        // The DRI corrects, republishes and submits the corrections — the
+        // dossier goes to the DCM verification, not back through the DRC.
+        analysisSheets.publish(caseId)
+        assertEquals(
+            WorkflowStatus.EN_VERIFICATION_DCM,
+            workflow.act(caseId, dri, WorkflowAction.SUBMIT_CORRECTIONS, null).status,
+        )
+        assertEquals(WorkflowStatus.PRET_POUR_COMITE, workflow.act(caseId, dcm, WorkflowAction.SEND_TO_COMITE, null).status)
     }
 
     @Test
@@ -134,7 +166,7 @@ class WorkflowModuleTest(
     }
 
     @Test
-    fun `a return to the DRI reopens the FA and clears comite approvals`() {
+    fun `a comite return to be completed goes through the corrections lane`() {
         val caseId = readyDossier()
         val dri = memberId("wf-ret-dri@banque.test", Department.DRI)
         val dcm = memberId("wf-ret-dcm@banque.test", Department.DCM)
@@ -144,17 +176,25 @@ class WorkflowModuleTest(
         workflow.act(caseId, dri, WorkflowAction.SUBMIT, null)
         workflow.act(caseId, dcm, WorkflowAction.APPROVE, null)
         workflow.act(caseId, drc, WorkflowAction.APPROVE, null)
+        workflow.act(caseId, dcm, WorkflowAction.SEND_TO_COMITE, null)
         workflow.act(caseId, comite1, WorkflowAction.APPROVE, null)
 
         val returned = workflow.act(caseId, comite1, WorkflowAction.REQUEST_COMPLETION, "Compléter les garanties")
-        assertEquals(WorkflowStatus.BROUILLON, returned.status)
+        assertEquals(WorkflowStatus.A_COMPLETER, returned.status)
         assertEquals(0, returned.comiteApprovals)
         assertEquals(AnalysisSheetStatus.DRAFT, analysisSheets.findByCase(caseId)?.status)
         assertEquals(1L, notifications.unreadCount(dri), "the return to DRI must notify the DRI")
+
+        // Completion goes back through the DCM verification, then the comité.
+        analysisSheets.publish(caseId)
+        assertEquals(
+            WorkflowStatus.EN_VERIFICATION_DCM,
+            workflow.act(caseId, dri, WorkflowAction.SUBMIT_CORRECTIONS, null).status,
+        )
     }
 
     @Test
-    fun `a comite rejection archives the dossier`() {
+    fun `a comite rejection requires the DCM's explicit archiving step`() {
         val caseId = readyDossier()
         val dri = memberId("wf-rej-dri@banque.test", Department.DRI)
         val dcm = memberId("wf-rej-dcm@banque.test", Department.DCM)
@@ -164,10 +204,33 @@ class WorkflowModuleTest(
         workflow.act(caseId, dri, WorkflowAction.SUBMIT, null)
         workflow.act(caseId, dcm, WorkflowAction.APPROVE, null)
         workflow.act(caseId, drc, WorkflowAction.APPROVE, null)
+        workflow.act(caseId, dcm, WorkflowAction.SEND_TO_COMITE, null)
 
         val rejected = workflow.act(caseId, comite, WorkflowAction.REJECT, "Signature insuffisante")
-        assertEquals(WorkflowStatus.REJETE, rejected.status)
+        assertEquals(WorkflowStatus.EN_ARCHIVAGE, rejected.status)
+        assertTrue(creditCases.findById(caseId)?.archivedAt == null, "the rejection alone must not archive yet")
+
+        // The DCM records the final archiving note; only then is the dossier archived.
+        val archived = workflow.act(caseId, dcm, WorkflowAction.ARCHIVE, "Archivé suite au rejet du comité")
+        assertEquals(WorkflowStatus.REJETE, archived.status)
         assertTrue(creditCases.findById(caseId)?.archivedAt != null)
+    }
+
+    @Test
+    fun `the DRI can toggle the FA back to draft only before the first submission`() {
+        val caseId = readyDossier()
+        val dri = memberId("wf-unp-dri@banque.test", Department.DRI)
+        val dcm = memberId("wf-unp-dcm@banque.test", Department.DCM)
+
+        // Never submitted: publish ↔ draft toggles freely.
+        assertEquals(AnalysisSheetStatus.DRAFT, analysisSheets.unpublish(caseId).status)
+        analysisSheets.publish(caseId)
+
+        // Once submitted (then returned), the self-unpublish is gone for good.
+        workflow.act(caseId, dri, WorkflowAction.SUBMIT, null)
+        workflow.act(caseId, dcm, WorkflowAction.REQUEST_CHANGES, "À revoir")
+        analysisSheets.publish(caseId)
+        assertFailsWith<ResponseStatusException> { analysisSheets.unpublish(caseId) }
     }
 
     @Test
@@ -193,6 +256,7 @@ class WorkflowModuleTest(
         workflow.act(caseId, dri, WorkflowAction.SUBMIT, null)
         workflow.act(caseId, dcm, WorkflowAction.APPROVE, null)
         workflow.act(caseId, drc, WorkflowAction.APPROVE, null)
+        workflow.act(caseId, dcm, WorkflowAction.SEND_TO_COMITE, null)
         workflow.act(caseId, comite, WorkflowAction.APPROVE, null)
 
         assertFailsWith<ResponseStatusException> { workflow.act(caseId, comite, WorkflowAction.APPROVE, null) }
