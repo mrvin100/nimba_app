@@ -4,6 +4,8 @@ import com.nimba.amortizationschedule.AmortizationScheduleModuleApi
 import com.nimba.amortizationschedule.ScheduleLineInfo
 import com.nimba.amortizationschedule.ScheduleSummary
 import com.nimba.analysissheet.AnalysisSheetModuleApi
+import com.nimba.analysissheet.FaObservation
+import com.nimba.analysissheet.FaObservationsProvider
 import com.nimba.analysissheet.FaPilier
 import com.nimba.analysissheet.FaSectionDefaults
 import com.nimba.analysissheet.FaSectionInfo
@@ -67,6 +69,7 @@ class AnalysisSheetDocxExportService(
     private val creditCases: CreditCaseModuleApi,
     private val guarantees: GuaranteeModuleApi,
     private val amortizationSchedules: AmortizationScheduleModuleApi,
+    private val observationsProvider: FaObservationsProvider,
     private val images: AnalysisSheetImageService,
     private val objectMapper: ObjectMapper,
 ) {
@@ -98,6 +101,7 @@ class AnalysisSheetDocxExportService(
             renderPilier(document, pilier, ctx)
         }
         renderConclusion(document, ctx)
+        renderObservations(document, observationsProvider.observationsFor(creditCaseId))
         renderAnnexes(document, ctx)
 
         val bytes =
@@ -702,6 +706,21 @@ class AnalysisSheetDocxExportService(
             lines += "$currency ${grouped(ta.totalImmatriculation)} pour l'immatriculation."
         }
         return lines
+    }
+
+    /** The A_COMPLETER loop's table — generated from the workflow, never typed by hand. */
+    private fun renderObservations(
+        document: XWPFDocument,
+        observations: List<FaObservation>,
+    ) {
+        if (observations.isEmpty()) return
+        spacer(document)
+        sectionHeading(document, "LES OBSERVATIONS SUR LE DOSSIER LORS DU DERNIER COMITE DE CREDIT")
+        dataTable(
+            document,
+            listOf("OBSERVATIONS", "ELEMENTS DE REPONSE"),
+            observations.map { listOf(it.observation, if (it.resolved) "Ok" else "Encours") },
+        )
     }
 
     private fun renderAnnexes(
