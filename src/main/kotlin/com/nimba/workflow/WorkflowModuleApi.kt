@@ -10,4 +10,17 @@ import java.util.UUID
 interface WorkflowModuleApi {
     /** The dossier's current lifecycle status, or null if it has no workflow yet. */
     fun statusOf(creditCaseId: UUID): WorkflowStatus?
+
+    /**
+     * Executes a workflow action on behalf of [actorId] — same gates as the
+     * HTTP action endpoint (status, direction, comment requirements). Used by
+     * the review module so a submitted review triggers its transition
+     * atomically. Returns the resulting status.
+     */
+    fun act(
+        creditCaseId: UUID,
+        actorId: UUID,
+        action: WorkflowAction,
+        comment: String?,
+    ): WorkflowStatus
 }
