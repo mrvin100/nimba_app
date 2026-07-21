@@ -157,6 +157,13 @@ class SecurityConfig(
                 // Matched before the DRI-only rule so a DCM/DRC/COMITE reviewer can post
                 // an action on a dossier that otherwise belongs to the DRI surface.
                 it.requestMatchers("$base/credit-cases/*/workflow/**", "$base/workflow/**").hasAnyRole(*REVIEW_ROLES)
+                // FA review surface (comments, resolve, submit verdict) crosses
+                // directions just like workflow; ReviewService enforces which
+                // direction may act (and on which comments) at each stage.
+                // Matched before the DRI-only rule for the same reason as workflow —
+                // otherwise a DCM/DRC submit falls through to hasRole("DRI_MEMBER")
+                // and gets a flat 403 before reaching the controller.
+                it.requestMatchers("$base/credit-cases/*/review/**").hasAnyRole(*REVIEW_ROLES)
                 // Reading a dossier and its documents is open to every review direction
                 // (reviewers must see the TA, FA and timeline they are judging). Only
                 // the DRI mutates the dossier's constitution.

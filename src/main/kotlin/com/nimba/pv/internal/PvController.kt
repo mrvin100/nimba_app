@@ -3,7 +3,10 @@ package com.nimba.pv.internal
 import com.nimba.pv.PvModuleApi
 import com.nimba.shared.CurrentUser
 import jakarta.validation.Valid
+import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
+import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -19,6 +22,7 @@ import java.util.UUID
 @RequestMapping("/credit-cases/{caseId}/pv")
 class PvController(
     private val pvs: PvModuleApi,
+    private val docxExport: PvDocxExportService,
     private val currentUser: CurrentUser,
 ) {
     @PostMapping
@@ -43,4 +47,17 @@ class PvController(
     fun finalize(
         @PathVariable caseId: UUID,
     ): PvResponse = pvs.finalize(caseId).toResponse()
+
+    /** Only reachable once the PV is FINAL — a draft has no snapshot to print. */
+    @GetMapping("/export/docx")
+    fun exportDocx(
+        @PathVariable caseId: UUID,
+    ): ResponseEntity<ByteArray> {
+        val export = docxExport.export(caseId)
+        return ResponseEntity
+            .ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"${export.filename}\"")
+            .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
+            .body(export.content)
+    }
 }

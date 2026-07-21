@@ -14,4 +14,7 @@ interface AmortizationScheduleModuleApi {
 
     /** TA figures for the latest schedule version, or null if none was uploaded. */
     fun scheduleSummary(creditCaseId: UUID): ScheduleSummary?
+
+    /** The latest schedule version's rows in échéance order (VR last), for documents reprinting the échéancier. */
+    fun scheduleLines(creditCaseId: UUID): List<ScheduleLineInfo>
 }

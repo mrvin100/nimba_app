@@ -119,6 +119,7 @@ class FmpEndpointTest(
         workflow.act(caseId, driId, WorkflowAction.SUBMIT, null)
         workflow.act(caseId, dcm, WorkflowAction.APPROVE, null)
         workflow.act(caseId, drc, WorkflowAction.APPROVE, null)
+        workflow.act(caseId, dcm, WorkflowAction.SEND_TO_COMITE, null)
         workflow.act(caseId, comite1, WorkflowAction.APPROVE, null)
         workflow.act(caseId, comite2, WorkflowAction.APPROVE, null)
         pvs.create(CreatePvCommand(caseId, dcm, LocalDate.of(2026, 7, 13)))

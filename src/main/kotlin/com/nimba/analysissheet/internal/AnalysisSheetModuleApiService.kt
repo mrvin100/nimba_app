@@ -5,9 +5,11 @@ import com.nimba.analysissheet.AnalysisSheetInfo
 import com.nimba.analysissheet.AnalysisSheetModuleApi
 import com.nimba.analysissheet.AnalysisSheetStatus
 import com.nimba.analysissheet.CreateAnalysisSheetCommand
+import com.nimba.analysissheet.FaSectionDefaults
 import com.nimba.analysissheet.FaSectionInfo
 import com.nimba.analysissheet.FaSectionKey
 import com.nimba.analysissheet.FaSectionRegistry
+import com.nimba.analysissheet.FaUnpublishGate
 import com.nimba.creditcase.CaseTypePolicies
 import com.nimba.creditcase.CreditCaseModuleApi
 import com.nimba.creditcase.getOrThrow
@@ -22,8 +24,10 @@ import java.util.UUID
 class AnalysisSheetModuleApiService(
     private val sheets: AnalysisSheetRepository,
     private val sectionsRepo: AnalysisSheetSectionRepository,
+    private val imagesRepo: AnalysisSheetImageRepository,
     private val creditCases: CreditCaseModuleApi,
     private val amortizationSchedules: AmortizationScheduleModuleApi,
+    private val unpublishGate: FaUnpublishGate,
 ) : AnalysisSheetModuleApi {
     @Transactional(readOnly = true)
     override fun findByCase(creditCaseId: UUID): AnalysisSheetInfo? = sheets.findByCreditCaseId(creditCaseId)?.toInfo()
@@ -59,10 +63,24 @@ class AnalysisSheetModuleApiService(
     override fun sections(creditCaseId: UUID): List<FaSectionInfo> {
         val sheet = sheets.findByCreditCaseId(creditCaseId) ?: return emptyList()
         val keys = FaSectionRegistry.sectionsFor(sheet.faVariant)
-        val stored = sectionsRepo.findByAnalysisSheetId(requireNotNull(sheet.id)).associateBy { it.sectionKey }
+        val sheetId = requireNotNull(sheet.id)
+        val stored = sectionsRepo.findByAnalysisSheetId(sheetId).associateBy { it.sectionKey }
+        val imagesByKey =
+            imagesRepo
+                .findByAnalysisSheetIdOrderByUploadedAt(sheetId)
+                .groupBy({ it.sectionKey }, { it.toInfo() })
         return keys.map { key ->
             val row = stored[key]
-            FaSectionInfo(key, key.pilier, key.type, key.label, row?.contentJson, row?.updatedAt)
+            FaSectionInfo(
+                key,
+                key.pilier,
+                key.type,
+                key.label,
+                row?.contentJson,
+                row?.updatedAt,
+                FaSectionDefaults.defaultContentFor(key),
+                imagesByKey[key].orEmpty(),
+            )
         }
     }
 
@@ -86,7 +104,15 @@ class AnalysisSheetModuleApiService(
         row.contentJson = contentJson
         row.updatedAt = Instant.now()
         val saved = sectionsRepo.save(row)
-        return FaSectionInfo(key, key.pilier, key.type, key.label, saved.contentJson, saved.updatedAt)
+        return FaSectionInfo(
+            key,
+            key.pilier,
+            key.type,
+            key.label,
+            saved.contentJson,
+            saved.updatedAt,
+            FaSectionDefaults.defaultContentFor(key),
+        )
     }
 
     @Transactional
@@ -95,6 +121,26 @@ class AnalysisSheetModuleApiService(
         sheet.status = AnalysisSheetStatus.PUBLISHED
         sheet.publishedAt = Instant.now()
         sheet.updatedAt = sheet.publishedAt!!
+        return sheet.toInfo()
+    }
+
+    @Transactional
+    override fun unpublish(creditCaseId: UUID): AnalysisSheetInfo {
+        val sheet =
+            sheets.findByCreditCaseId(creditCaseId)
+                ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Aucune fiche d'analyse pour ce dossier")
+        if (sheet.status != AnalysisSheetStatus.PUBLISHED) {
+            throw ResponseStatusException(HttpStatus.CONFLICT, "La fiche d'analyse n'est pas publiée")
+        }
+        if (!unpublishGate.canUnpublish(creditCaseId)) {
+            throw ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Le dossier a déjà été soumis à la revue — la fiche ne peut plus être dépubliée par le DRI",
+            )
+        }
+        sheet.status = AnalysisSheetStatus.DRAFT
+        sheet.publishedAt = null
+        sheet.updatedAt = Instant.now()
         return sheet.toInfo()
     }
 
