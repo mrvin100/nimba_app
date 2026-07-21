@@ -11,7 +11,10 @@ import jakarta.validation.Valid
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
 import org.springframework.data.web.PageableDefault
+import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
+import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -28,6 +31,7 @@ import java.util.UUID
 @RequestMapping("/cautions")
 class CautionController(
     private val cautions: CautionModuleApi,
+    private val docxExport: CautionDocxExportService,
     private val currentUser: CurrentUser,
 ) {
     /** The generic document engine's metadata — the frontend's dynamic form is built from this, never hardcoded per type. */
@@ -69,4 +73,17 @@ class CautionController(
     fun delete(
         @PathVariable id: UUID,
     ) = cautions.delete(id)
+
+    /** Only reachable once the caution is FINAL — a draft has no client snapshot to print. */
+    @GetMapping("/{id}/export/docx")
+    fun exportDocx(
+        @PathVariable id: UUID,
+    ): ResponseEntity<ByteArray> {
+        val export = docxExport.export(id)
+        return ResponseEntity
+            .ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"${export.filename}\"")
+            .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
+            .body(export.content)
+    }
 }

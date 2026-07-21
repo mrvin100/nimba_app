@@ -151,7 +151,9 @@ class CautionModuleTest(
         val forClient = cautions.list(PageRequest.of(0, 20), clientId = client)
         assertEquals(1, forClient.totalElements)
 
-        val byType = cautions.list(PageRequest.of(0, 20), documentType = CautionDocumentType.ACF)
+        // Scoped by this test's own client — the table isn't isolated per test class,
+        // so a bare "no ACF anywhere" assertion would be flaky against other tests' data.
+        val byType = cautions.list(PageRequest.of(0, 20), clientId = client, documentType = CautionDocumentType.ACF)
         assertEquals(0, byType.totalElements)
     }
 }

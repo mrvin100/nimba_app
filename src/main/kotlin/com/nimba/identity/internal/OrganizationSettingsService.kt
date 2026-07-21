@@ -28,6 +28,10 @@ class OrganizationSettingsService(
         settings.organizationName = request.organizationName
         settings.senderName = request.senderName
         settings.senderEmail = request.senderEmail
+        settings.signataire1Nom = request.signataire1Nom?.takeIf { it.isNotBlank() }
+        settings.signataire1Titre = request.signataire1Titre?.takeIf { it.isNotBlank() }
+        settings.signataire2Nom = request.signataire2Nom?.takeIf { it.isNotBlank() }
+        settings.signataire2Titre = request.signataire2Titre?.takeIf { it.isNotBlank() }
         settings.updatedAt = Instant.now(clock)
         return settings
     }
