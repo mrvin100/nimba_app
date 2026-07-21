@@ -188,9 +188,11 @@ class AnalysisSheetDocxExportService(
         when (pilier) {
             FaPilier.COVER -> "Couverture"
             FaPilier.PILIER_1 -> "Pilier 1"
+            FaPilier.PILIER_2 -> "Pilier 2"
             FaPilier.PILIER_3 -> "Pilier 3"
             FaPilier.PILIER_4 -> "Pilier 4"
             FaPilier.CONCLUSION -> "Conclusion"
+            FaPilier.ANNEXES -> "Annexes"
         }
 
     private fun renderSectionContent(
@@ -202,7 +204,21 @@ class AnalysisSheetDocxExportService(
     ) {
         when (section.type) {
             FaSectionType.NARRATIVE -> paragraph(document, ras(section.contentJson))
-            FaSectionType.TABLE -> renderPersonnesCles(document, section.contentJson)
+            FaSectionType.TABLE ->
+                if (section.key == FaSectionKey.PILIER1_PERSONNES_CLES) {
+                    renderPersonnesCles(document, section.contentJson)
+                } else {
+                    // The remaining typed tables (and the KEY_VALUE / FLEX_TABLE /
+                    // FINANCIAL / IMAGE shapes below) get their real rendering in the
+                    // exact-replica export; until then the export stays truthful about
+                    // what it does not print yet.
+                    paragraph(document, "RAS")
+                }
+            FaSectionType.KEY_VALUE,
+            FaSectionType.FLEX_TABLE,
+            FaSectionType.FINANCIAL,
+            FaSectionType.IMAGE,
+            -> paragraph(document, "RAS")
             FaSectionType.BOUND -> renderBoundSection(document, section.key, conditions, taSummary, caseGuarantees)
             FaSectionType.COMPUTED -> renderComputedSection(document, section.key, conditions, taSummary)
         }

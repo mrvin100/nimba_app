@@ -148,6 +148,24 @@ class AnalysisSheetModuleTest(
         assertFailsWith<ResponseStatusException> {
             sheets.updateSection(caseId, FaSectionKey.PILIER3_RENTABILITE_BANQUE, "non éditable")
         }
+        // The payer synthesis belongs to SANS_CONTRAT only — an AVEC_CONTRAT
+        // dossier can never write it.
+        assertFailsWith<ResponseStatusException> {
+            sheets.updateSection(caseId, FaSectionKey.PILIER1_SYNTHESE_PAYEUR, "hors variante")
+        }
+    }
+
+    @Test
+    fun `the risk matrix section is served with its leasing default prefill`() {
+        val analyst = analystId()
+        val caseId = leasingCaseId(analyst)
+        uploadSchedule(caseId)
+        sheets.create(CreateAnalysisSheetCommand(caseId, analyst))
+
+        val risques = sheets.sections(caseId).first { it.key == FaSectionKey.PILIER4_RISQUES }
+
+        assertNull(risques.contentJson)
+        assertTrue(requireNotNull(risques.defaultContentJson).contains("Risque de crédit"))
     }
 
     @Test
