@@ -4,6 +4,8 @@ import com.nimba.caution.CautionDocumentType
 import com.nimba.caution.CautionModuleApi
 import com.nimba.caution.CautionStatus
 import com.nimba.caution.getOrThrow
+import com.nimba.client.ClientModuleApi
+import com.nimba.identity.IdentityModuleApi
 import com.nimba.shared.CurrentUser
 import com.nimba.shared.PageResponse
 import com.nimba.shared.toPageResponse
@@ -31,6 +33,8 @@ import java.util.UUID
 @RequestMapping("/cautions")
 class CautionController(
     private val cautions: CautionModuleApi,
+    private val clients: ClientModuleApi,
+    private val identity: IdentityModuleApi,
     private val docxExport: CautionDocxExportService,
     private val currentUser: CurrentUser,
 ) {
@@ -66,7 +70,34 @@ class CautionController(
         @RequestParam(required = false) clientId: UUID?,
         @RequestParam(required = false) documentType: CautionDocumentType?,
         @RequestParam(required = false) status: CautionStatus?,
-    ): PageResponse<CautionResponse> = cautions.list(pageable, clientId, documentType, status).toPageResponse { it.toResponse() }
+    ): PageResponse<CautionSummaryResponse> {
+        val page = cautions.list(pageable, clientId, documentType, status)
+        // Resolved once per page (bounded by page size), not once per row.
+        val clientsById =
+            page.content
+                .map { it.clientId }
+                .distinct()
+                .associateWith { clients.findById(it) }
+        val creatorsById =
+            page.content
+                .map { it.createdBy }
+                .distinct()
+                .associateWith { identity.findUser(it) }
+        return page.toPageResponse { info ->
+            CautionSummaryResponse(
+                id = info.id,
+                clientId = info.clientId,
+                clientMatricule = clientsById[info.clientId]?.matricule ?: "RAS",
+                clientRaisonSociale = clientsById[info.clientId]?.raisonSociale ?: "RAS",
+                documentType = info.documentType,
+                referenceNumber = info.referenceNumber,
+                status = info.status,
+                createdByName = creatorsById[info.createdBy]?.fullName ?: "RAS",
+                createdAt = info.createdAt,
+                updatedAt = info.updatedAt,
+            )
+        }
+    }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)

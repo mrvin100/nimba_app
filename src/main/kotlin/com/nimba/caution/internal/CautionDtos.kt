@@ -57,6 +57,24 @@ internal fun CautionInfo.toResponse(): CautionResponse =
         finalizedAt = finalizedAt,
     )
 
+/**
+ * Row of the Cautions data table — the client's name and the creator's name are
+ * resolved once per page by the controller (batched, not one request per row)
+ * since [CautionInfo] itself only carries their ids.
+ */
+data class CautionSummaryResponse(
+    val id: UUID,
+    val clientId: UUID,
+    val clientMatricule: String,
+    val clientRaisonSociale: String,
+    val documentType: CautionDocumentType,
+    val referenceNumber: String,
+    val status: CautionStatus,
+    val createdByName: String,
+    val createdAt: Instant,
+    val updatedAt: Instant,
+)
+
 /** One document-type metadata entry — the frontend's dynamic form is built from this, never hardcoded per type. */
 data class CautionDocumentTypeResponse(
     val code: CautionDocumentType,
