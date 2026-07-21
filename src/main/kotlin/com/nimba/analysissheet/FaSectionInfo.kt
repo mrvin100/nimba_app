@@ -19,4 +19,6 @@ data class FaSectionInfo(
     val contentJson: String? = null,
     val updatedAt: Instant? = null,
     val defaultContentJson: String? = null,
+    /** Uploaded figures, IMAGE-type sections only — always empty for the others. */
+    val images: List<FaSectionImageInfo> = emptyList(),
 )
