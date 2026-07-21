@@ -9,8 +9,13 @@ import com.nimba.creditcase.ContractType
 import com.nimba.creditcase.CreateCreditCaseCommand
 import com.nimba.creditcase.CreditCaseModuleApi
 import com.nimba.creditcase.ProductType
+import com.nimba.identity.Department
 import com.nimba.identity.internal.User
 import com.nimba.identity.internal.UserRepository
+import com.nimba.workflow.WorkflowAction
+import com.nimba.workflow.WorkflowStatus
+import com.nimba.workflow.internal.WorkflowEvent
+import com.nimba.workflow.internal.WorkflowEventRepository
 import org.apache.poi.xwpf.usermodel.XWPFDocument
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -31,6 +36,7 @@ class AnalysisSheetDocxExportTest(
     @Autowired private val schedules: AmortizationScheduleRepository,
     @Autowired private val sheets: AnalysisSheetModuleApi,
     @Autowired private val export: AnalysisSheetDocxExportService,
+    @Autowired private val workflowEvents: WorkflowEventRepository,
     @Autowired private val users: UserRepository,
 ) {
     private fun analystId(): UUID =
@@ -132,6 +138,29 @@ class AnalysisSheetDocxExportTest(
                 .toSet()
         assertEquals(setOf("Tahoma"), fonts)
         doc.close()
+    }
+
+    @Test
+    fun `prints the comité's completion observations from the workflow loop`() {
+        val analyst = analystId()
+        val caseId = preparedCaseId(analyst)
+        workflowEvents.saveAndFlush(
+            WorkflowEvent(
+                creditCaseId = caseId,
+                actorId = analyst,
+                actorDepartment = Department.COMITE,
+                action = WorkflowAction.REQUEST_COMPLETION,
+                fromStatus = WorkflowStatus.PRET_POUR_COMITE,
+                toStatus = WorkflowStatus.BROUILLON,
+                comment = "Titre foncier\nNon endettement",
+            ),
+        )
+
+        val text = allText(export.export(caseId).content)
+
+        assertContains(text, "LES OBSERVATIONS SUR LE DOSSIER LORS DU DERNIER COMITE DE CREDIT")
+        assertContains(text, "Titre foncier")
+        assertContains(text, "Encours")
     }
 
     @Test
