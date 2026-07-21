@@ -5,8 +5,6 @@ import com.nimba.caution.internal.CautionDocxExportService
 import com.nimba.client.ClientModuleApi
 import com.nimba.client.CreateClientCommand
 import com.nimba.identity.Department
-import com.nimba.identity.internal.OrganizationSettingsService
-import com.nimba.identity.internal.UpdateOrganizationRequest
 import com.nimba.identity.internal.UserRepository
 import com.nimba.seedMember
 import org.apache.poi.xwpf.usermodel.XWPFDocument
@@ -30,25 +28,18 @@ class CautionDocxExportTest(
     @Autowired private val clients: ClientModuleApi,
     @Autowired private val users: UserRepository,
     @Autowired private val passwordEncoder: PasswordEncoder,
-    @Autowired private val organizationSettings: OrganizationSettingsService,
     @Autowired private val export: CautionDocxExportService,
 ) {
     private fun dcmMemberId(): UUID =
         requireNotNull(seedMember(users, passwordEncoder, "caution-export-${UUID.randomUUID()}@banque.test", Department.DCM).id)
 
-    private fun ensureSignatories() {
-        organizationSettings.update(
-            UpdateOrganizationRequest(
-                organizationName = "Nimba",
-                senderName = "Nimba",
-                senderEmail = "no-reply@banque.test",
-                signataire1Nom = "QUENTIN DETCHENOU",
-                signataire1Titre = "Directeur Crédit Marketing",
-                signataire2Nom = "FANNY SOUMAH",
-                signataire2Titre = "Directrice Générale Adjointe",
-            ),
+    private fun signatoryFields(): Map<String, String> =
+        mapOf(
+            "signataire1Nom" to "QUENTIN DETCHENOU",
+            "signataire1Titre" to "Directeur Crédit Marketing",
+            "signataire2Nom" to "FANNY SOUMAH",
+            "signataire2Titre" to "Directrice Générale Adjointe",
         )
-    }
 
     private fun allText(bytes: ByteArray): String =
         XWPFDocument(ByteArrayInputStream(bytes)).use { doc ->
@@ -60,7 +51,6 @@ class CautionDocxExportTest(
 
     @Test
     fun `exports a finalized SMS as the replica structure`() {
-        ensureSignatories()
         val dcm = dcmMemberId()
         val client =
             clients.create(
@@ -77,15 +67,17 @@ class CautionDocxExportTest(
                     clientId = client.id,
                     documentType = CautionDocumentType.SMS,
                     content =
-                        mapOf(
-                            "beneficiaire" to "ELECTRICITE DE GUINEE EDG-SA",
-                            "referenceAppelOffres" to "AAONO N°: 001/EDG-SA/DAAL/PRMP/2026",
-                            "objetMarche" to "Travaux de Réfection des Bâtiments du site de Garafiri (EDG-SA)",
-                            "montant" to "238756476",
-                            "dateEmission" to "2026-02-11",
-                            "dateOffre" to "2026-02-13",
-                            "dateExpiration" to "2026-05-13",
-                        ),
+                        signatoryFields() +
+                            mapOf(
+                                "beneficiaire" to "ELECTRICITE DE GUINEE EDG-SA",
+                                "referenceAppelOffres" to "AAONO N°: 001/EDG-SA/DAAL/PRMP/2026",
+                                "objetMarche" to "Travaux de Réfection des Bâtiments du site de Garafiri (EDG-SA)",
+                                "devise" to "GNF",
+                                "montant" to "238756476",
+                                "dateEmission" to "2026-02-11",
+                                "dateOffre" to "2026-02-13",
+                                "dateExpiration" to "2026-05-13",
+                            ),
                     createdBy = dcm,
                 ),
             )
@@ -100,10 +92,13 @@ class CautionDocxExportTest(
         assertContains(text, "GUINEENNE DES TRAVAUX ET FOURNITURES - SARLU")
         assertContains(text, "ELECTRICITE DE GUINEE EDG-SA")
         assertContains(text, "238 756 476")
-        assertContains(text, "Deux Cent Trente Huit Millions Sept Cent Cinquante Six Mille Quatre Cent Soixante Seize")
+        assertContains(text, "Deux Cent Trente Huit Millions Sept Cent Cinquante Six Mille Quatre Cent Soixante Seize Francs Guinéens")
+        assertContains(text, "National Restreint")
         assertContains(text, "QUENTIN DETCHENOU")
         assertContains(text, "Directeur Crédit Marketing")
         assertContains(text, "FANNY SOUMAH")
+        assertTrue(!text.contains("Monsieur"))
+        assertTrue(!text.contains("Madame"))
 
         val doc = XWPFDocument(ByteArrayInputStream(result.content))
         val fonts =
@@ -117,7 +112,6 @@ class CautionDocxExportTest(
 
     @Test
     fun `exports a finalized ACF as the replica structure`() {
-        ensureSignatories()
         val dcm = dcmMemberId()
         val client =
             clients.create(
@@ -137,13 +131,15 @@ class CautionDocxExportTest(
                     clientId = client.id,
                     documentType = CautionDocumentType.ACF,
                     content =
-                        mapOf(
-                            "beneficiaire" to "L'ELECTRICITE DE GUINEE EDG SA",
-                            "referenceAppelOffres" to "007/EDG-SA/DAAL/DPSM/2025",
-                            "objetMarche" to "Travaux de réfection des bâtiments de GARAFIRI (EDG-SA).LOT1",
-                            "montant" to "2828096140",
-                            "dateEmission" to "2026-02-19",
-                        ),
+                        signatoryFields() +
+                            mapOf(
+                                "beneficiaire" to "L'ELECTRICITE DE GUINEE EDG SA",
+                                "referenceAppelOffres" to "007/EDG-SA/DAAL/DPSM/2025",
+                                "objetMarche" to "Travaux de réfection des bâtiments de GARAFIRI (EDG-SA).LOT1",
+                                "devise" to "GNF",
+                                "montant" to "2828096140",
+                                "dateEmission" to "2026-02-19",
+                            ),
                     createdBy = dcm,
                 ),
             )
@@ -160,6 +156,8 @@ class CautionDocxExportTest(
         assertContains(text, "2 828 096 140")
         assertContains(text, "Deux Milliards Huit Cent Vingt Huit Millions Quatre Vingt Seize Mille Cent Quarante")
         assertContains(text, "19 Février 2026")
+        assertTrue(!text.contains("Monsieur"))
+        assertTrue(!text.contains("Madame"))
     }
 
     @Test
@@ -172,13 +170,15 @@ class CautionDocxExportTest(
                     clientId = client.id,
                     documentType = CautionDocumentType.ACF,
                     content =
-                        mapOf(
-                            "beneficiaire" to "X",
-                            "referenceAppelOffres" to "X",
-                            "objetMarche" to "X",
-                            "montant" to "1000",
-                            "dateEmission" to "2026-01-01",
-                        ),
+                        signatoryFields() +
+                            mapOf(
+                                "beneficiaire" to "X",
+                                "referenceAppelOffres" to "X",
+                                "objetMarche" to "X",
+                                "devise" to "GNF",
+                                "montant" to "1000",
+                                "dateEmission" to "2026-01-01",
+                            ),
                     createdBy = dcm,
                 ),
             )

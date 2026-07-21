@@ -41,6 +41,9 @@ interface CautionModuleApi {
 
     /** Deletes a draft caution (never a finalized one — it is an official record). 409 if FINAL. */
     fun delete(id: UUID)
+
+    /** Whether any caution has ever been created — drives whether the create form still offers a starting-sequence override. */
+    fun referenceSequenceInitialized(): Boolean
 }
 
 /** Resolves a caution or fails with the module's canonical 404. */

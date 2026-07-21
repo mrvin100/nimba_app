@@ -14,4 +14,6 @@ data class CreateCautionCommand(
     val documentType: CautionDocumentType,
     val content: Map<String, String>,
     val createdBy: UUID,
+    /** Only takes effect for the very first caution ever created — see `CautionNumberGenerator`'s KDoc. */
+    val startingReferenceSequence: Int? = null,
 )

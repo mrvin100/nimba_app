@@ -5,6 +5,9 @@ enum class CautionFieldType {
     TEXT,
     DATE,
     AMOUNT,
+
+    /** A currency code (GNF, USD, EUR...) — the frontend renders a select, defaulting to GNF. */
+    CURRENCY,
 }
 
 /** One field of a document type's form, exposed as metadata so the frontend never hardcodes a per-type page. */
@@ -19,6 +22,12 @@ data class CautionFieldDefinition(
  * several documents are requested together; specific fields only apply to
  * their own type. This IS the "generic document engine" metadata: adding a
  * future document type means adding an entry here, not a new hardcoded form.
+ *
+ * The two signatories and the montant/devise pair are shared because every
+ * generated document needs them, not because they're conceptually part of
+ * one specific type — a signatory can differ from one document to the next
+ * (delegation), which is why they're entered per document rather than read
+ * from a single bank-wide setting.
  */
 object CautionFieldRegistry {
     val SHARED_FIELDS =
@@ -26,8 +35,13 @@ object CautionFieldRegistry {
             CautionFieldDefinition("beneficiaire", "Bénéficiaire (Maître d'ouvrage)", CautionFieldType.TEXT),
             CautionFieldDefinition("referenceAppelOffres", "Référence de l'appel d'offres", CautionFieldType.TEXT),
             CautionFieldDefinition("objetMarche", "Objet du marché", CautionFieldType.TEXT),
+            CautionFieldDefinition("devise", "Devise", CautionFieldType.CURRENCY),
             CautionFieldDefinition("montant", "Montant", CautionFieldType.AMOUNT),
             CautionFieldDefinition("dateEmission", "Date d'émission", CautionFieldType.DATE),
+            CautionFieldDefinition("signataire1Nom", "Signataire 1 — Nom complet", CautionFieldType.TEXT),
+            CautionFieldDefinition("signataire1Titre", "Signataire 1 — Titre", CautionFieldType.TEXT),
+            CautionFieldDefinition("signataire2Nom", "Signataire 2 — Nom complet", CautionFieldType.TEXT),
+            CautionFieldDefinition("signataire2Titre", "Signataire 2 — Titre", CautionFieldType.TEXT),
         )
 
     private val SPECIFIC_FIELDS: Map<CautionDocumentType, List<CautionFieldDefinition>> =

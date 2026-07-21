@@ -38,7 +38,12 @@ class CautionModuleApiService(
                 Caution(
                     clientId = client.id,
                     documentType = command.documentType,
-                    referenceNumber = numberGenerator.nextReferenceNumber(client.matricule, command.documentType),
+                    referenceNumber =
+                        numberGenerator.nextReferenceNumber(
+                            client.matricule,
+                            command.documentType,
+                            command.startingReferenceSequence,
+                        ),
                     createdBy = command.createdBy,
                 ).apply {
                     contentJson = objectMapper.writeValueAsString(command.content)
@@ -89,6 +94,9 @@ class CautionModuleApiService(
         documentType: CautionDocumentType?,
         status: CautionStatus?,
     ): Page<CautionInfo> = cautions.search(clientId, documentType, status, pageable).map { it.toInfo(objectMapper) }
+
+    @Transactional(readOnly = true)
+    override fun referenceSequenceInitialized(): Boolean = numberGenerator.isInitialized()
 
     @Transactional
     override fun delete(id: UUID) {

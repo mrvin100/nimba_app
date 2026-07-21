@@ -10,6 +10,7 @@ import com.nimba.caution.CautionStatus
 import com.nimba.caution.CreateCautionCommand
 import com.nimba.caution.UpdateCautionCommand
 import jakarta.validation.constraints.NotNull
+import jakarta.validation.constraints.Positive
 import java.time.Instant
 import java.util.UUID
 
@@ -19,10 +20,19 @@ data class CreateCautionRequest(
     @field:NotNull
     val documentType: CautionDocumentType,
     val content: Map<String, String> = emptyMap(),
+    /** Only takes effect for the very first caution ever created — see `CautionNumberGenerator`'s KDoc. */
+    @field:Positive
+    val startingReferenceSequence: Int? = null,
 )
 
 internal fun CreateCautionRequest.toCommand(createdBy: UUID): CreateCautionCommand =
-    CreateCautionCommand(clientId = clientId, documentType = documentType, content = content, createdBy = createdBy)
+    CreateCautionCommand(
+        clientId = clientId,
+        documentType = documentType,
+        content = content,
+        createdBy = createdBy,
+        startingReferenceSequence = startingReferenceSequence,
+    )
 
 data class UpdateCautionRequest(
     val content: Map<String, String> = emptyMap(),
@@ -101,3 +111,7 @@ internal fun documentTypeResponses(): List<CautionDocumentTypeResponse> =
             specificFields = CautionFieldRegistry.specificFieldsFor(type).map { it.toResponse() },
         )
     }
+
+data class ReferenceSequenceStatusResponse(
+    val initialized: Boolean,
+)

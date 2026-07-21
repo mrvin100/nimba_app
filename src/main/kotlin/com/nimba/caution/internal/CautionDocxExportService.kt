@@ -5,10 +5,9 @@ import com.nimba.caution.CautionDocumentType
 import com.nimba.caution.CautionInfo
 import com.nimba.caution.CautionModuleApi
 import com.nimba.caution.CautionStatus
-import com.nimba.identity.IdentityModuleApi
-import com.nimba.identity.OrganizationSignatories
-import com.nimba.shared.toFrenchWords
+import com.nimba.shared.amountInWords
 import org.apache.poi.xwpf.usermodel.ParagraphAlignment
+import org.apache.poi.xwpf.usermodel.TableRowAlign
 import org.apache.poi.xwpf.usermodel.XWPFDocument
 import org.apache.poi.xwpf.usermodel.XWPFParagraph
 import org.apache.poi.xwpf.usermodel.XWPFTable
@@ -33,19 +32,30 @@ data class CautionExport(
     val content: ByteArray,
 )
 
+/** One run of text within a paragraph, bold or not — every value the DCM entered via the creation form is printed bold, exactly like the bank marks up its own paper templates. */
+private data class Segment(
+    val text: String,
+    val bold: Boolean = false,
+)
+
+private fun plain(text: String) = Segment(text)
+
+private fun bold(text: String) = Segment(text, bold = true)
+
 /**
  * Builds the Word (.docx) export of a finalized caution as an exact replica
  * of the bank's real documents (ground truth: `CAUTION.docx` and `ATTESTATION
  * DE CAPACITE FINANCIERE.docx` in docs/caution): A4, the templates' margins,
- * Tahoma justified body — same conventions confirmed against both files
- * (Tahoma, 11pt default, no header/footer/logo — printed on the bank's own
- * letterhead paper, like the FA/PV/FMP). Only a FINAL caution has a client
- * snapshot to print, mirroring the PV export's own gate.
+ * Tahoma justified body, the double-bordered/shaded header box, and every
+ * bold run matching the reference exactly. Only a FINAL caution has a client
+ * snapshot to print, mirroring the PV export's own gate. Signatories are the
+ * caution's own content fields (not a bank-wide setting) — a signatory can
+ * differ from one document to the next (delegation), so each document keeps
+ * its own answer once finalized, same as every other entered field.
  */
 @Service
 class CautionDocxExportService(
     private val cautions: CautionModuleApi,
-    private val identity: IdentityModuleApi,
 ) {
     private val shortDate = DateTimeFormatter.ofPattern("dd-MM-uu")
 
@@ -57,14 +67,13 @@ class CautionDocxExportService(
             throw ResponseStatusException(HttpStatus.CONFLICT, "La caution doit être finalisée avant d'être exportée")
         }
         val snapshot = requireNotNull(caution.clientSnapshot) { "A FINAL caution always carries a client snapshot" }
-        val signatories = identity.organizationSignatories()
 
         val document = XWPFDocument()
         setUpPage(document)
         repeat(4) { spacer(document) }
         when (caution.documentType) {
-            CautionDocumentType.SMS -> renderSms(document, caution, snapshot.raisonSociale.orRas(), snapshot.agence, signatories)
-            CautionDocumentType.ACF -> renderAcf(document, caution, snapshot, signatories)
+            CautionDocumentType.SMS -> renderSms(document, caution, snapshot.raisonSociale.orRas(), snapshot.agence)
+            CautionDocumentType.ACF -> renderAcf(document, caution, snapshot)
         }
 
         val bytes =
@@ -83,56 +92,79 @@ class CautionDocxExportService(
         caution: CautionInfo,
         raisonSociale: String,
         agence: String?,
-        signatories: OrganizationSignatories,
     ) {
         val c = caution.content
-        titleCentered(document, "CAUTION DE SOUMISSION")
-        titleCentered(document, "N° ${caution.referenceNumber}")
+        headerBox(document, "CAUTION DE SOUMISSION", caution.referenceNumber)
         spacer(document)
 
-        paragraph(document, "AFRILAND FIRST BANK ; AGENCE ${agence.orRas()}")
-        paragraph(document, "BENEFICIAIRE : ${c["beneficiaire"].orRas()}")
+        boldCenteredLine(document, "AFRILAND FIRST BANK ; AGENCE ${agence.orRas()}")
+        boldCenteredLine(document, "BENEFICIAIRE : ${c["beneficiaire"].orRas()}")
         spacer(document)
-        paragraph(document, "DATE : ${fmtShort(c["dateEmission"])}")
-        paragraph(document, "GARANTIE N° ${caution.referenceNumber}")
+        boldCenteredLine(document, "DATE : ${fmtShort(c["dateEmission"])}")
+        boldCenteredLine(document, "GARANTIE N° ${caution.referenceNumber}")
         spacer(document)
 
-        paragraph(
+        mixedParagraph(
             document,
-            "Nous avons été informés que la société $raisonSociale (Ci-après dénommée « le Candidat ») a répondu à " +
-                "votre appel d'offres ${c["referenceAppelOffres"].orRas()} relatif aux : ${c["objetMarche"].orRas()} " +
-                "Et vous a soumis son offre en date du ${fmtLong(c["dateOffre"])} (ci-après dénommée « l'offre »).",
+            plain("Nous avons été informés que la société "),
+            bold(raisonSociale),
+            plain(" (Ci-après dénommée "),
+            bold("« le Candidat »"),
+            plain(") a répondu à votre appel d'offres National Restreint "),
+            bold(c["referenceAppelOffres"].orRas()),
+            plain(" relatif aux : "),
+            bold(c["objetMarche"].orRas()),
+            plain(" Et vous a soumis son offre en date du "),
+            bold(fmtLong(c["dateOffre"])),
+            plain(" (ci-après dénommée « "),
+            bold("l'offre"),
+            plain(" »)."),
         )
         paragraph(
             document,
             "En vertu des dispositions du dossier d'Appel d'offres, l'Offre doit être accompagnée d'une garantie d'offre.",
         )
-        paragraph(
+        mixedParagraph(
             document,
-            "A la demande du Maître d'ouvrage, nous Afriland First Bank Guinée S.A., Société Anonyme au Capital de " +
-                "GNF 200 000 000 000, dont le Siège Social est à Almamya- Commune de Kaloum, B.P. : 343, Conakry - " +
-                "République de Guinée, inscrite sur la liste des banques et établissements financiers sous le numéro " +
-                "021 et immatriculée au Registre de Commerce et du Crédit Mobilier de Conakry sous le numéro " +
-                "GC KAL/040.445A/2012 du 17 Mai 2012, représentée par ${signatoryLine(signatories)} dûment habilités, " +
-                "ci-après dénommée « la Banque » ;",
+            plain("A la demande du Maître d'ouvrage, nous "),
+            bold("Afriland First Bank Guinée S.A."),
+            plain(", Société Anonyme au Capital de "),
+            bold("GNF 200 000 000 000"),
+            plain(
+                ", dont le Siège Social est à Almamya-Commune de Kaloum, B.P. : 343, Conakry - République de Guinée, " +
+                    "inscrite sur la liste des banques et établissements financiers sous le numéro 021 et immatriculée " +
+                    "au Registre de Commerce et du Crédit Mobilier de Conakry sous le numéro GC–KAL/040.445A/2012 du " +
+                    "17 Mai 2012, représentée par ",
+            ),
+            bold("${signatoryName(c, 1)}, ${signatoryTitle(c, 1)}"),
+            plain(" et "),
+            bold("${signatoryName(c, 2)}, ${signatoryTitre2(c)}"),
+            plain(" dûment habilités, ci-après dénommée "),
+            bold("« la Banque »"),
+            plain(" ;"),
         )
-        paragraph(
+        mixedParagraph(
             document,
-            "Nous engageons par la présente, sans réserve et irrévocablement, à vous payer à première demande, toute " +
-                "somme d'argent que vous pourriez réclamer dans la limite de ${amountLine(c["montant"])}.",
+            plain(
+                "Nous engageons par la présente, sans réserve et irrévocablement, à vous payer à première demande, " +
+                    "toute somme d'argent que vous pourriez réclamer dans la limite de ",
+            ),
+            bold(amountClause(c)),
         )
         paragraph(
             document,
             "Votre demande en paiement doit être accompagnée d'une déclaration attestant que le Soumissionnaire n'a " +
                 "pas exécuté une des obligations auxquelles il est tenu en vertu de l'Offre à savoir :",
         )
-        paragraph(
+        listItem(
             document,
+            "a)",
             "S'il retire l'Offre pendant la période de validité qu'il a spécifiée dans la lettre de soumission de " +
                 "l'offre ; ou pendant toute prolongation de la période de validité de l'offre qu'il aura effectuée ; ou",
         )
-        paragraph(
+        listItem(
             document,
+            "b)",
             "si, s'étant vu notifier l'acceptation de l'Offre par le maître de l'ouvrage pendant la période de " +
                 "validité telle qu'indiquée dans la lettre de soumission de l'offre ou prorogée par le maître de " +
                 "l'ouvrage avant l'expiration de cette période, il (i) ne signe pas l'acte d'engagement du Marché ; " +
@@ -149,10 +181,10 @@ class CautionDocxExportService(
                 "première des dates suivantes (i) vingt-huit (28) après l'expiration de l'offre ou (c) trois ans " +
                 "après la date d'émission de la présente garantie.",
         )
-        paragraph(
+        mixedParagraph(
             document,
-            "Toute demande de paiement au titre de la présente garantie doit être reçue à cette date au plus tard " +
-                "le ${fmtLong(c["dateExpiration"])}.",
+            plain("Toute demande de paiement au titre de la présente garantie doit être reçue à cette date au plus tard le "),
+            bold("${fmtLong(c["dateExpiration"])}."),
         )
         paragraph(
             document,
@@ -162,9 +194,9 @@ class CautionDocxExportService(
         spacer(document)
         val faitLe = document.createParagraph()
         faitLe.alignment = ParagraphAlignment.RIGHT
-        run(faitLe, "Fait à Conakry, le ${fmtLong(c["dateEmission"])}")
+        addRun(faitLe, "Fait à Conakry, le ${fmtLong(c["dateEmission"])}", bold = true)
         spacer(document)
-        renderSignatureBlock(document, signatories)
+        renderSignatureBlock(document, c)
     }
 
     // ---- Attestation de Capacité Financière (ACF) --------------------------------------
@@ -173,11 +205,9 @@ class CautionDocxExportService(
         document: XWPFDocument,
         caution: CautionInfo,
         snapshot: CautionClientSnapshotInfo,
-        signatories: OrganizationSignatories,
     ) {
         val c = caution.content
-        titleCentered(document, "ATTESTATION DE CAPACITE FINANCIERE")
-        titleCentered(document, "N° ${caution.referenceNumber}")
+        headerBox(document, "ATTESTATION DE CAPACITE FINANCIERE", caution.referenceNumber)
         spacer(document)
 
         paragraph(document, "Adressée à ${c["beneficiaire"].orRas()}")
@@ -188,59 +218,115 @@ class CautionDocxExportService(
         spacer(document)
 
         val sigle = snapshot.sigle?.takeIf { it.isNotBlank() }?.let { " en abrégé « $it »" } ?: ""
-        paragraph(
+        mixedParagraph(
             document,
-            "Nous soussignés, Afriland First Bank Guinée S.A., Société Anonyme au Capital de GNF 200 000 000 000, " +
-                "dont le Siège Social est à Almamya - Commune de Kaloum, B.P. : 343, Conakry - République de Guinée, " +
-                "inscrite sur la liste des banques et établissements financiers sous le numéro 021 et immatriculée " +
-                "au Registre de Commerce et du Crédit Mobilier de Conakry sous le numéro GC KAL/040.445A/2012 du 17 " +
-                "Mai 2012, représentée par ${signatoryLine(signatories)}, en vertu des pouvoirs dont ils sont investis.",
+            plain("Nous soussignés, "),
+            bold("Afriland First Bank Guinée S.A."),
+            plain(", Société Anonyme au Capital de "),
+            bold("GNF 200 000 000 000"),
+            plain(
+                ", dont le Siège Social est à Almamya-Commune de Kaloum, B.P. : 343, Conakry - République de Guinée, " +
+                    "inscrite sur la liste des banques et établissements financiers sous le numéro 021 et immatriculée " +
+                    "au Registre de Commerce et du Crédit Mobilier de Conakry sous le numéro GC–KAL/040.445A/2012 du " +
+                    "17 Mai 2012, représentée par ",
+            ),
+            bold("${signatoryName(c, 1)}, ${signatoryTitle(c, 1)}"),
+            plain(" et "),
+            bold("${signatoryName(c, 2)}, ${signatoryTitre2(c)}"),
+            plain(", en vertu des pouvoirs dont ils sont investis."),
         )
-        paragraph(
+        mixedParagraph(
             document,
-            "Certifions par la présente que la société ${snapshot.raisonSociale}$sigle, siège social " +
-                "${snapshot.adressePhysique.orRas()}, enregistrée au RCCM ${snapshot.rccm.orRas()} est titulaire du " +
-                "compte N°${snapshot.accountNumber.orRas()} ouvert dans nos livres à l'Agence ${snapshot.agence.orRas()}.",
+            plain("Certifions par la présente que la société "),
+            bold("${raisonSocialeOf(snapshot)}$sigle"),
+            plain(", siège social "),
+            bold(snapshot.adressePhysique.orRas()),
+            plain(", enregistrée au RCCM "),
+            bold(snapshot.rccm.orRas()),
+            plain(" est titulaire du compte N°"),
+            bold(snapshot.accountNumber.orRas()),
+            plain(" ouvert dans nos livres à l'Agence "),
+            bold(snapshot.agence.orRas()),
+            plain("."),
         )
-        paragraph(
+        mixedParagraph(
             document,
-            "L'Entreprise dispose à notre connaissance les moyens financiers de ${amountLine(c["montant"])} " +
-                "nécessaires à la réalisation du marché pour lequel elle présente une offre.",
+            plain("L'Entreprise dispose à notre connaissance les moyens financiers de "),
+            bold(amountClause(c)),
+            plain(" nécessaires à la réalisation du marché pour lequel elle présente une offre."),
         )
         spacer(document)
         paragraph(document, "Fait pour servir et valoir ce que de droit.")
         val faitLe = document.createParagraph()
-        run(faitLe, "Fait à Conakry, le ${fmtLong(c["dateEmission"])}")
+        addRun(faitLe, "Fait à Conakry, le ${fmtLong(c["dateEmission"])}", bold = true)
         spacer(document)
-        renderSignatureBlock(document, signatories)
+        renderSignatureBlock(document, c)
     }
+
+    private fun raisonSocialeOf(snapshot: CautionClientSnapshotInfo): String = snapshot.raisonSociale
 
     // ---- Shared rendering helpers -------------------------------------------------------
 
-    private fun signatoryLine(signatories: OrganizationSignatories): String {
-        val first = "Monsieur ${signatories.signataire1Nom.orRas()}, ${signatories.signataire1Titre.orRas()}"
-        val second = "Madame ${signatories.signataire2Nom.orRas()}, ${signatories.signataire2Titre.orRas()}"
-        return "$first et $second"
-    }
+    private fun signatoryName(
+        content: Map<String, String>,
+        index: Int,
+    ): String = content["signataire${index}Nom"].orRas()
+
+    private fun signatoryTitle(
+        content: Map<String, String>,
+        index: Int,
+    ): String = content["signataire${index}Titre"].orRas()
+
+    /** Kept as its own function only so the mixed-paragraph call sites read symmetrically; identical to [signatoryTitle]. */
+    private fun signatoryTitre2(content: Map<String, String>): String = signatoryTitle(content, 2)
 
     private fun renderSignatureBlock(
         document: XWPFDocument,
-        signatories: OrganizationSignatories,
+        content: Map<String, String>,
     ) {
         val table = document.createTable(2, 2)
-        table.setWidth("100%")
+        table.setWidth(100)
         borderless(table)
-        setCell(table.getRow(0).getCell(0), signatories.signataire1Titre.orRas(), bold = true)
-        setCell(table.getRow(0).getCell(1), signatories.signataire2Titre.orRas(), bold = true)
+        setCell(table.getRow(0).getCell(0), signatoryTitle(content, 1), bold = true, alignment = ParagraphAlignment.LEFT)
+        setCell(table.getRow(0).getCell(1), signatoryTitle(content, 2), bold = true, alignment = ParagraphAlignment.RIGHT)
         table.getRow(1).getCell(0).addParagraph()
         table.getRow(1).getCell(1).addParagraph()
-        setCell(table.getRow(1).getCell(0), signatories.signataire1Nom.orRas())
-        setCell(table.getRow(1).getCell(1), signatories.signataire2Nom.orRas())
+        setCell(table.getRow(1).getCell(0), signatoryName(content, 1), alignment = ParagraphAlignment.LEFT)
+        setCell(table.getRow(1).getCell(1), signatoryName(content, 2), alignment = ParagraphAlignment.RIGHT)
     }
 
-    private fun amountLine(rawAmount: String?): String {
-        val amount = rawAmount?.toBigDecimalOrNull() ?: return "GNF RAS"
-        return "GNF ${grouped(amount)} (${amount.toFrenchWords()} Francs Guinéens)"
+    /** "GNF 238 756 476 (Deux Cent ... Seize Francs Guinéens)" — bold as a whole, since the amount and its currency are entered via the creation form. */
+    private fun amountClause(content: Map<String, String>): String {
+        val amount = content["montant"]?.toBigDecimalOrNull() ?: return "RAS"
+        val currency = content["devise"]?.takeIf { it.isNotBlank() } ?: "GNF"
+        return "$currency ${grouped(amount)} (${amount.amountInWords(currency)})."
+    }
+
+    // ---- Header box ---------------------------------------------------------------------
+
+    /** The double-bordered, 25%-shaded title box every reference template opens with — title then reference number, both bold and centered. */
+    private fun headerBox(
+        document: XWPFDocument,
+        title: String,
+        referenceNumber: String,
+    ) {
+        val table = document.createTable(1, 1)
+        table.setWidth(70)
+        table.setTableAlignment(TableRowAlign.CENTER)
+        val borderSize = 18
+        table.setTopBorder(XWPFTable.XWPFBorderType.DOUBLE, borderSize, 0, "auto")
+        table.setBottomBorder(XWPFTable.XWPFBorderType.DOUBLE, borderSize, 0, "auto")
+        table.setLeftBorder(XWPFTable.XWPFBorderType.DOUBLE, borderSize, 0, "auto")
+        table.setRightBorder(XWPFTable.XWPFBorderType.DOUBLE, borderSize, 0, "auto")
+
+        val cell = table.getRow(0).getCell(0)
+        cell.setColor("D9D9D9")
+        val titlePara = cell.paragraphs.first()
+        titlePara.alignment = ParagraphAlignment.CENTER
+        addRun(titlePara, title, bold = true, size = TITLE_SIZE)
+        val refPara = cell.addParagraph()
+        refPara.alignment = ParagraphAlignment.CENTER
+        addRun(refPara, "N° $referenceNumber", bold = true, size = TITLE_SIZE)
     }
 
     // ---- POI helpers (same conventions as the FA/PV/FMP exports) -----------------------
@@ -257,7 +343,7 @@ class CautionDocxExportService(
         margins.bottom = BigInteger.valueOf(1417)
     }
 
-    private fun run(
+    private fun addRun(
         paragraph: XWPFParagraph,
         text: String,
         bold: Boolean = false,
@@ -277,29 +363,57 @@ class CautionDocxExportService(
         val p = document.createParagraph()
         p.alignment = ParagraphAlignment.BOTH
         p.spacingAfter = 160
-        run(p, text)
+        addRun(p, text)
+    }
+
+    /** A justified paragraph built from a sequence of bold/plain runs — how every entered field gets bolded inline with fixed prose. */
+    private fun mixedParagraph(
+        document: XWPFDocument,
+        vararg segments: Segment,
+    ) {
+        val p = document.createParagraph()
+        p.alignment = ParagraphAlignment.BOTH
+        p.spacingAfter = 160
+        segments.forEach { seg -> addRun(p, seg.text, bold = seg.bold) }
+    }
+
+    /** "a) ..." / "b) ..." — the offer-withdrawal clauses print as a lettered list, not plain paragraphs. */
+    private fun listItem(
+        document: XWPFDocument,
+        marker: String,
+        text: String,
+    ) {
+        val p = document.createParagraph()
+        p.alignment = ParagraphAlignment.BOTH
+        p.spacingAfter = 160
+        p.indentationLeft = 360
+        p.indentationHanging = 360
+        addRun(p, "$marker $text")
     }
 
     private fun spacer(document: XWPFDocument) {
         document.createParagraph()
     }
 
-    private fun titleCentered(
+    /** The header's identifying lines (agence, bénéficiaire, date, référence) — bold and centered, unlike the justified body. */
+    private fun boldCenteredLine(
         document: XWPFDocument,
         text: String,
     ) {
         val p = document.createParagraph()
         p.alignment = ParagraphAlignment.CENTER
-        run(p, text, bold = true, size = TITLE_SIZE)
+        addRun(p, text, bold = true)
     }
 
     private fun setCell(
         cell: XWPFTableCell,
         text: String,
         bold: Boolean = false,
+        alignment: ParagraphAlignment = ParagraphAlignment.LEFT,
     ) {
         val p = cell.paragraphs.first()
-        run(p, text, bold = bold)
+        p.alignment = alignment
+        addRun(p, text, bold = bold)
     }
 
     private fun borderless(table: XWPFTable) {
