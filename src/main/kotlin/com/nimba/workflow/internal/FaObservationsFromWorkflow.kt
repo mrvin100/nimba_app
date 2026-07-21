@@ -23,8 +23,13 @@ class FaObservationsFromWorkflow(
         return timeline
             .filter { it.action == WorkflowAction.REQUEST_COMPLETION && !it.comment.isNullOrBlank() }
             .flatMap { event ->
+                // Resolved once the DRI has resubmitted after the observation —
+                // through the corrections lane (design §12.1) or a full resubmit.
                 val resolved =
-                    timeline.any { it.action == WorkflowAction.SUBMIT && it.occurredAt.isAfter(event.occurredAt) }
+                    timeline.any {
+                        (it.action == WorkflowAction.SUBMIT || it.action == WorkflowAction.SUBMIT_CORRECTIONS) &&
+                            it.occurredAt.isAfter(event.occurredAt)
+                    }
                 event.comment
                     .orEmpty()
                     .lines()
