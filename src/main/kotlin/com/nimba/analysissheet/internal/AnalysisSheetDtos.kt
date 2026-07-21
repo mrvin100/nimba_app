@@ -4,6 +4,7 @@ import com.nimba.amortizationschedule.ScheduleSummary
 import com.nimba.analysissheet.AnalysisSheetInfo
 import com.nimba.analysissheet.AnalysisSheetStatus
 import com.nimba.analysissheet.FaPilier
+import com.nimba.analysissheet.FaSectionImageInfo
 import com.nimba.analysissheet.FaSectionInfo
 import com.nimba.analysissheet.FaSectionKey
 import com.nimba.analysissheet.FaSectionType
@@ -50,6 +51,8 @@ data class FaSectionResponse(
     val updatedAt: Instant?,
     /** Prefill for sections that start populated (e.g. §4.1's risk matrix) — the editor seeds from it. */
     val defaultContentJson: String?,
+    /** Uploaded figures, IMAGE-type sections only. */
+    val images: List<FaSectionImageResponse>,
 )
 
 internal fun FaSectionInfo.toResponse(): FaSectionResponse =
@@ -61,4 +64,29 @@ internal fun FaSectionInfo.toResponse(): FaSectionResponse =
         contentJson = contentJson,
         updatedAt = updatedAt,
         defaultContentJson = defaultContentJson,
+        images = images.map { it.toResponse() },
     )
+
+data class FaSectionImageResponse(
+    val id: UUID,
+    val fileName: String,
+    val contentType: String,
+    val sizeBytes: Long,
+    val caption: String?,
+    val uploadedAt: Instant,
+)
+
+internal fun FaSectionImageInfo.toResponse(): FaSectionImageResponse =
+    FaSectionImageResponse(
+        id = id,
+        fileName = fileName,
+        contentType = contentType,
+        sizeBytes = sizeBytes,
+        caption = caption,
+        uploadedAt = uploadedAt,
+    )
+
+data class FaSectionImageCaptionRequest(
+    @field:Size(max = 300, message = "La légende ne peut dépasser 300 caractères")
+    val caption: String?,
+)

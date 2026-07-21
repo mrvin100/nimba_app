@@ -4,6 +4,7 @@ import com.nimba.TestcontainersConfiguration
 import com.nimba.amortizationschedule.internal.AmortizationSchedule
 import com.nimba.amortizationschedule.internal.AmortizationScheduleLine
 import com.nimba.amortizationschedule.internal.AmortizationScheduleRepository
+import com.nimba.analysissheet.internal.AnalysisSheetImageService
 import com.nimba.creditcase.ContractType
 import com.nimba.creditcase.CreateCreditCaseCommand
 import com.nimba.creditcase.CreditCaseModuleApi
@@ -30,6 +31,7 @@ class AnalysisSheetModuleTest(
     @Autowired private val creditCases: CreditCaseModuleApi,
     @Autowired private val schedules: AmortizationScheduleRepository,
     @Autowired private val sheets: AnalysisSheetModuleApi,
+    @Autowired private val imageService: AnalysisSheetImageService,
     @Autowired private val users: UserRepository,
 ) {
     private fun analystId(): UUID =
@@ -166,6 +168,28 @@ class AnalysisSheetModuleTest(
 
         assertNull(risques.contentJson)
         assertTrue(requireNotNull(risques.defaultContentJson).contains("Risque de crédit"))
+    }
+
+    @Test
+    fun `section images are gated to IMAGE sections of a draft sheet`() {
+        val analyst = analystId()
+        val caseId = leasingCaseId(analyst)
+        uploadSchedule(caseId)
+        sheets.create(CreateAnalysisSheetCommand(caseId, analyst))
+
+        // Not an IMAGE section.
+        assertFailsWith<ResponseStatusException> {
+            imageService.add(caseId, FaSectionKey.PILIER1_SYNTHESE, "org.png", "image/png", byteArrayOf(1), null, analyst)
+        }
+        // Not an image payload.
+        assertFailsWith<ResponseStatusException> {
+            imageService.add(caseId, FaSectionKey.PILIER1_ORGANIGRAMME, "doc.pdf", "application/pdf", byteArrayOf(1), null, analyst)
+        }
+
+        sheets.publish(caseId)
+        assertFailsWith<ResponseStatusException> {
+            imageService.add(caseId, FaSectionKey.PILIER1_ORGANIGRAMME, "org.png", "image/png", byteArrayOf(1), null, analyst)
+        }
     }
 
     @Test

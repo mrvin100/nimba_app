@@ -1,6 +1,7 @@
 package com.nimba.amortizationschedule.internal
 
 import com.nimba.amortizationschedule.AmortizationScheduleModuleApi
+import com.nimba.amortizationschedule.ScheduleLineInfo
 import com.nimba.amortizationschedule.ScheduleSummary
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -17,6 +18,25 @@ class AmortizationScheduleModuleApiService(
     @Transactional(readOnly = true)
     override fun hasScheduleForCase(creditCaseId: UUID): Boolean =
         schedules.findFirstByCreditCaseIdOrderByVersionNumberDesc(creditCaseId) != null
+
+    @Transactional(readOnly = true)
+    override fun scheduleLines(creditCaseId: UUID): List<ScheduleLineInfo> {
+        val schedule = schedules.findFirstByCreditCaseIdOrderByVersionNumberDesc(creditCaseId) ?: return emptyList()
+        return schedule.lines
+            .sortedWith(compareBy({ it.isResidualValue }, { it.numeroEcheance.toIntOrNull() ?: Int.MAX_VALUE }))
+            .map { line ->
+                ScheduleLineInfo(
+                    numeroEcheance = line.numeroEcheance,
+                    dateEcheance = line.dateEcheance,
+                    loyerHt = line.loyerHt,
+                    taxes = line.taxes,
+                    loyerTtc = line.loyerTtc,
+                    interet = line.interet,
+                    capital = line.capital,
+                    capitalRestantDu = line.capitalRestantDu,
+                )
+            }
+    }
 
     @Transactional(readOnly = true)
     override fun scheduleSummary(creditCaseId: UUID): ScheduleSummary? {

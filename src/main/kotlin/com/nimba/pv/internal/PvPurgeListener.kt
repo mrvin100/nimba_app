@@ -1,6 +1,8 @@
 package com.nimba.pv.internal
 
 import com.nimba.creditcase.CreditCaseDeleted
+import com.nimba.creditcase.CreditCaseDocumentResetRequested
+import com.nimba.creditcase.ResettableDocument
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
 
@@ -19,5 +21,12 @@ class PvPurgeListener(
             guaranteeSnapshotRows.deleteByPvId(pvId)
         }
         pvs.deleteByCreditCaseId(event.creditCaseId)
+    }
+
+    /** The Settings tab's « réinitialiser le PV » — same wipe, dossier kept (design §12.3). */
+    @EventListener
+    fun reset(event: CreditCaseDocumentResetRequested) {
+        if (event.document != ResettableDocument.PV) return
+        purge(CreditCaseDeleted(event.creditCaseId))
     }
 }
