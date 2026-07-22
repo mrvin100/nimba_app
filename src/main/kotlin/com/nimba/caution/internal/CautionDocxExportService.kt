@@ -104,6 +104,31 @@ class CautionDocxExportService(
         )
     }
 
+    /**
+     * The dossier's Notification de caution — a companion letter summarizing the
+     * whole request (articulation des concours, garanties, conditions de banque),
+     * rendered from the dossier's own content and the live client record.
+     */
+    @Transactional(readOnly = true)
+    fun exportDossierNotification(dossierId: UUID): CautionExport {
+        val dossier =
+            cautions.findDossier(dossierId)
+                ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Dossier introuvable")
+        val snapshot = liveSnapshot(dossier.clientId)
+
+        val document = XWPFDocument()
+        setUpPage(document)
+        renderNotification(document, dossier.content, snapshot)
+
+        val bytes =
+            ByteArrayOutputStream().use { out ->
+                document.write(out)
+                document.close()
+                out.toByteArray()
+            }
+        return CautionExport("notification-${dossier.referenceNumber}.docx", bytes)
+    }
+
     // ---- Caution de Soumission (SMS) ---------------------------------------------------
 
     private fun renderSms(
@@ -387,6 +412,135 @@ class CautionDocxExportService(
         addRun(faitLe, "Fait à Conakry, le ${fmtLong(c["dateEmission"])}", bold = true)
         spacer(document)
         renderSignatureBlock(document, c)
+    }
+
+    // ---- Notification de caution (dossier companion) -----------------------------------
+
+    /**
+     * Renders the Notification de caution as a replica of `NOTIFICATION.docx`: an
+     * outgoing letter with the reference/date line, the right-aligned recipient
+     * block, then the three numbered sections (articulation des concours,
+     * garanties retenues, conditions de banque). The variable, dossier-specific
+     * content (the demande summary, the articulation/garanties/conditions lines)
+     * is entered on the dossier and printed line by line; section headings and
+     * the fixed prose match the model.
+     */
+    private fun renderNotification(
+        document: XWPFDocument,
+        content: Map<String, String>,
+        snapshot: CautionClientSnapshotInfo,
+    ) {
+        val refDate = document.createTable(1, 2)
+        refDate.setWidthType(TableWidthType.DXA)
+        refDate.setWidth(CONTENT_WIDTH)
+        borderless(refDate)
+        val half = (CONTENT_WIDTH / 2).toString()
+        setCell(refDate.getRow(0).getCell(0), content["notifReference"].orRas(), alignment = ParagraphAlignment.LEFT, width = half)
+        setCell(
+            refDate.getRow(0).getCell(1),
+            "Conakry, le ${fmtLong(content["dateEmission"])}",
+            alignment = ParagraphAlignment.RIGHT,
+            width = half,
+        )
+        spacer(document)
+
+        rightBoldLine(document, snapshot.raisonSociale.orRas())
+        rightBoldLine(document, "A l'Attention du ${content["destinataireFonction"] ?: "Directeur Général"}")
+        rightBoldLine(document, content["destinataireNom"].orRas())
+        spacer(document)
+
+        mixedParagraph(document, bold("Objet : ${content["objet"] ?: "Notification de caution"}"), alignment = ParagraphAlignment.LEFT)
+        mixedParagraph(document, bold("V/Réf : ${content["vReference"].orRas()}"), alignment = ParagraphAlignment.LEFT)
+        spacer(document)
+
+        paragraph(document, "Monsieur,")
+        paragraph(
+            document,
+            "Votre correspondance ci-dessus relative à la demande de ${content["demandeResume"].orRas()} dans notre " +
+                "institution financière a retenu toute notre attention et nous vous en remercions.",
+        )
+        paragraph(
+            document,
+            "Y faisant suite, nous avons le plaisir de vous confirmer que notre comité de crédit compétent pour votre " +
+                "dossier a marqué son accord pour votre concours aux conditions suivantes :",
+        )
+
+        boldHeading(document, "ARTICULATION DES CONCOURS :")
+        multilineParagraphs(document, content["articulationConcours"])
+
+        boldHeading(document, "II. GARANTIES RETENUES :")
+        mixedParagraph(document, bold("Garanties détenues : "), plain(content["garantiesDetenues"] ?: "RAS"))
+        mixedParagraph(document, bold("Garanties à recueillir : "))
+        multilineParagraphs(document, content["garantiesARecueillir"])
+
+        boldHeading(document, "III. CONDITIONS DE BANQUE :")
+        content["conditionsBanque"]
+            ?.split("\n")
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            ?.forEach { labelledLine(document, it) }
+
+        paragraph(
+            document,
+            "Pour la bonne règle, nous vous remercions de bien vouloir accuser réception de la présente, en nous " +
+                "retournant la copie ci-jointe, dûment revêtue de votre signature, et précédée de la mention " +
+                "« lu et approuvé, bon pour toutes les clauses ci-dessus ».",
+        )
+        paragraph(document, "Nous restons à votre entière disposition pour toutes informations complémentaires.")
+        paragraph(
+            document,
+            "Espérant avoir répondu à vos attentes, nous réitérons nos remerciements pour l'intérêt porté à notre " +
+                "institution et vous prions d'agréer, Monsieur, l'expression de nos salutations distinguées.",
+        )
+        spacer(document)
+        renderSignatureBlock(document, content)
+    }
+
+    /** A right-aligned bold line, used for the recipient block of the notification. */
+    private fun rightBoldLine(
+        document: XWPFDocument,
+        text: String,
+    ) {
+        val p = document.createParagraph()
+        p.alignment = ParagraphAlignment.RIGHT
+        addRun(p, text, bold = true)
+    }
+
+    /** A bold, left-aligned section heading (e.g. "ARTICULATION DES CONCOURS :"). */
+    private fun boldHeading(
+        document: XWPFDocument,
+        text: String,
+    ) {
+        val p = document.createParagraph()
+        p.alignment = ParagraphAlignment.BOTH
+        p.spacingBefore = 120
+        p.spacingAfter = 80
+        addRun(p, text, bold = true)
+    }
+
+    /** Splits an entered multi-line value into one justified paragraph per non-empty line. */
+    private fun multilineParagraphs(
+        document: XWPFDocument,
+        value: String?,
+    ) {
+        value
+            ?.split("\n")
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            ?.forEach { paragraph(document, it) }
+    }
+
+    /** A line whose label (up to and including the first colon) is bold, the rest plain — the notification's condition lines. */
+    private fun labelledLine(
+        document: XWPFDocument,
+        line: String,
+    ) {
+        val colon = line.indexOf(':')
+        if (colon >= 0) {
+            mixedParagraph(document, bold(line.substring(0, colon + 1)), plain(line.substring(colon + 1)))
+        } else {
+            paragraph(document, line)
+        }
     }
 
     // ---- Shared rendering helpers -------------------------------------------------------

@@ -9,7 +9,10 @@ import jakarta.validation.Valid
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
 import org.springframework.data.web.PageableDefault
+import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
+import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -30,6 +33,7 @@ import java.util.UUID
 @RequestMapping("/caution-dossiers")
 class CautionDossierController(
     private val cautions: CautionModuleApi,
+    private val docxExport: CautionDocxExportService,
     private val currentUser: CurrentUser,
 ) {
     @PostMapping
@@ -52,4 +56,17 @@ class CautionDossierController(
             dossier = cautions.dossierOrThrow(id).toResponse(),
             documents = cautions.dossierDocuments(id).map { it.toResponse() },
         )
+
+    /** The dossier's Notification de caution as a Word (.docx) download. */
+    @GetMapping("/{id}/notification/docx")
+    fun exportNotification(
+        @PathVariable id: UUID,
+    ): ResponseEntity<ByteArray> {
+        val export = docxExport.exportDossierNotification(id)
+        return ResponseEntity
+            .ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"${export.filename}\"")
+            .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
+            .body(export.content)
+    }
 }

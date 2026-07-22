@@ -1,11 +1,13 @@
 package com.nimba.caution
 
 import com.nimba.TestcontainersConfiguration
+import com.nimba.caution.internal.CautionDocxExportService
 import com.nimba.client.ClientModuleApi
 import com.nimba.client.CreateClientCommand
 import com.nimba.identity.Department
 import com.nimba.identity.internal.UserRepository
 import com.nimba.seedMember
+import org.apache.poi.xwpf.usermodel.XWPFDocument
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -13,10 +15,12 @@ import org.springframework.context.annotation.Import
 import org.springframework.data.domain.PageRequest
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.web.server.ResponseStatusException
+import java.io.ByteArrayInputStream
 import java.util.UUID
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 @Import(TestcontainersConfiguration::class)
 @SpringBootTest
@@ -25,6 +29,7 @@ class CautionDossierTest(
     @Autowired private val clients: ClientModuleApi,
     @Autowired private val users: UserRepository,
     @Autowired private val passwordEncoder: PasswordEncoder,
+    @Autowired private val export: CautionDocxExportService,
 ) {
     private fun dcmMemberId(): UUID =
         requireNotNull(seedMember(users, passwordEncoder, "dossier-${UUID.randomUUID()}@banque.test", Department.DCM).id)
@@ -93,5 +98,59 @@ class CautionDossierTest(
 
         val forClient = cautions.listDossiers(PageRequest.of(0, 20), clientId = client)
         assertEquals(1, forClient.totalElements)
+    }
+
+    @Test
+    fun `exports the dossier notification with its sections and entered content`() {
+        val dcm = dcmMemberId()
+        val client =
+            clients.create(CreateClientCommand("M-${UUID.randomUUID()}", "SOCIETE GUINEE BATI BUSINESS SARL", dcm)).id
+        val dossier =
+            cautions.createDossier(
+                CreateDossierCommand(
+                    clientId = client,
+                    content =
+                        mapOf(
+                            "notifReference" to "N°/     /AFB/DCM/DGA/26",
+                            "dateEmission" to "2026-07-21",
+                            "destinataireNom" to "Mr Kalil Kourouma",
+                            "vReference" to "0051/07/GBB/2026",
+                            "demandeResume" to "trois (03) cautions de soumissions et trois (03) attestations de facilité de crédit",
+                            "articulationConcours" to
+                                "Trois (03) cautions de soumission de GNF 306 000 000 : Lot 4, Lot6 et LOT8 ;\n" +
+                                "Trois (03) attestations de facilité de crédit de GNF 4 000 000 000 : LOT4, LOT6 et Lot8.",
+                            "garantiesDetenues" to "RAS",
+                            "garantiesARecueillir" to "Signature de trois (03) traites.",
+                            "conditionsBanque" to
+                                "Com. d'engagement : 1% Flat HT min GNF 1 000 000 ;\nFrais de délivrance : 0,1% HT min GNF 500 000 ;",
+                            "signataire1Nom" to "QUENTIN DETCHENOU",
+                            "signataire1Titre" to "Directeur Crédit Marketing",
+                            "signataire2Nom" to "FANNY SOUMAH",
+                            "signataire2Titre" to "Directrice Générale Adjointe",
+                        ),
+                    createdBy = dcm,
+                ),
+            )
+
+        val result = export.exportDossierNotification(dossier.id)
+        val text =
+            XWPFDocument(ByteArrayInputStream(result.content)).use { doc ->
+                buildString {
+                    doc.paragraphs.forEach { appendLine(it.text) }
+                    doc.tables.forEach { t -> t.rows.forEach { r -> r.tableCells.forEach { appendLine(it.text) } } }
+                }
+            }
+
+        assertTrue(result.filename.startsWith("notification-"))
+        assertContains(text, "Objet : Notification de caution")
+        assertContains(text, "SOCIETE GUINEE BATI BUSINESS SARL")
+        assertContains(text, "Mr Kalil Kourouma")
+        assertContains(text, "ARTICULATION DES CONCOURS :")
+        assertContains(text, "Trois (03) cautions de soumission de GNF 306 000 000 : Lot 4, Lot6 et LOT8 ;")
+        assertContains(text, "II. GARANTIES RETENUES :")
+        assertContains(text, "Signature de trois (03) traites.")
+        assertContains(text, "III. CONDITIONS DE BANQUE :")
+        assertContains(text, "Com. d'engagement :")
+        assertContains(text, "QUENTIN DETCHENOU")
     }
 }
