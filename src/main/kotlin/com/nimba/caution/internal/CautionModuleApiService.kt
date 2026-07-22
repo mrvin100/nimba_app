@@ -73,6 +73,18 @@ class CautionModuleApiService(
         return dossier.toInfo(objectMapper)
     }
 
+    @Transactional
+    override fun updateDossier(
+        id: UUID,
+        content: Map<String, String>,
+    ): CautionDossierInfo {
+        val dossier =
+            dossiers.findById(id).orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Dossier introuvable") }
+        dossier.contentJson = objectMapper.writeValueAsString(content)
+        dossier.updatedAt = Instant.now()
+        return dossier.toInfo(objectMapper)
+    }
+
     @Transactional(readOnly = true)
     override fun findDossier(id: UUID): CautionDossierInfo? = dossiers.findById(id).orElse(null)?.toInfo(objectMapper)
 

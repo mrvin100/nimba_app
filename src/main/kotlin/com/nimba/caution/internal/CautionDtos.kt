@@ -139,6 +139,10 @@ internal fun CreateDossierRequest.toCommand(createdBy: UUID): CreateDossierComma
         startingReferenceSequence = startingReferenceSequence,
     )
 
+data class UpdateDossierRequest(
+    val content: Map<String, String> = emptyMap(),
+)
+
 data class DossierResponse(
     val id: UUID,
     val clientId: UUID,

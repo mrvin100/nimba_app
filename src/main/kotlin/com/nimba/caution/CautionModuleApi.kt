@@ -48,6 +48,12 @@ interface CautionModuleApi {
     /** Opens a caution dossier (one client request against one appel d'offres) and assigns its reference number. 404 if the client is unknown. */
     fun createDossier(command: CreateDossierCommand): CautionDossierInfo
 
+    /** Replaces a dossier's shared market/companion content (the fields its documents and companions reuse). 404 if unknown. */
+    fun updateDossier(
+        id: UUID,
+        content: Map<String, String>,
+    ): CautionDossierInfo
+
     fun findDossier(id: UUID): CautionDossierInfo?
 
     /** Pages through dossiers, newest first; the client filter is optional. */

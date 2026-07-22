@@ -16,6 +16,7 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
@@ -47,6 +48,12 @@ class CautionDossierController(
         @PageableDefault(size = 20, sort = ["createdAt"], direction = Sort.Direction.DESC) pageable: Pageable,
         @RequestParam(required = false) clientId: UUID?,
     ): PageResponse<DossierResponse> = cautions.listDossiers(pageable, clientId).toPageResponse { it.toResponse() }
+
+    @PutMapping("/{id}")
+    fun update(
+        @PathVariable id: UUID,
+        @Valid @RequestBody request: UpdateDossierRequest,
+    ): DossierResponse = cautions.updateDossier(id, request.content).toResponse()
 
     @GetMapping("/{id}")
     fun getById(
