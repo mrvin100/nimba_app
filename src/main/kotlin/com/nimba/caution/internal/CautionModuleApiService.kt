@@ -2,11 +2,13 @@ package com.nimba.caution.internal
 
 import com.nimba.caution.CautionClientSnapshotInfo
 import com.nimba.caution.CautionDocumentType
+import com.nimba.caution.CautionDossierInfo
 import com.nimba.caution.CautionFieldRegistry
 import com.nimba.caution.CautionInfo
 import com.nimba.caution.CautionModuleApi
 import com.nimba.caution.CautionStatus
 import com.nimba.caution.CreateCautionCommand
+import com.nimba.caution.CreateDossierCommand
 import com.nimba.caution.UpdateCautionCommand
 import com.nimba.client.ClientModuleApi
 import com.nimba.client.getOrThrow
@@ -24,6 +26,7 @@ import java.util.UUID
 @Service
 class CautionModuleApiService(
     private val cautions: CautionRepository,
+    private val dossiers: CautionDossierRepository,
     private val clients: ClientModuleApi,
     private val numberGenerator: CautionNumberGenerator,
     private val objectMapper: ObjectMapper,
@@ -32,6 +35,7 @@ class CautionModuleApiService(
     override fun create(command: CreateCautionCommand): CautionInfo {
         val client = clients.getOrThrow(command.clientId)
         requireRequiredFields(command.documentType, command.content)
+        command.dossierId?.let { requireDossierForClient(it, client.id) }
 
         val caution =
             cautions.save(
@@ -46,10 +50,53 @@ class CautionModuleApiService(
                         ),
                     createdBy = command.createdBy,
                 ).apply {
+                    dossierId = command.dossierId
                     contentJson = objectMapper.writeValueAsString(command.content)
                 },
             )
         return caution.toInfo(objectMapper)
+    }
+
+    @Transactional
+    override fun createDossier(command: CreateDossierCommand): CautionDossierInfo {
+        val client = clients.getOrThrow(command.clientId)
+        val dossier =
+            dossiers.save(
+                CautionDossier(
+                    clientId = client.id,
+                    referenceNumber = numberGenerator.nextDossierReferenceNumber(client.matricule, command.startingReferenceSequence),
+                    createdBy = command.createdBy,
+                ).apply {
+                    contentJson = objectMapper.writeValueAsString(command.content)
+                },
+            )
+        return dossier.toInfo(objectMapper)
+    }
+
+    @Transactional(readOnly = true)
+    override fun findDossier(id: UUID): CautionDossierInfo? = dossiers.findById(id).orElse(null)?.toInfo(objectMapper)
+
+    @Transactional(readOnly = true)
+    override fun listDossiers(
+        pageable: Pageable,
+        clientId: UUID?,
+    ): Page<CautionDossierInfo> = dossiers.search(clientId, pageable).map { it.toInfo(objectMapper) }
+
+    @Transactional(readOnly = true)
+    override fun dossierDocuments(dossierId: UUID): List<CautionInfo> =
+        cautions.findByDossierIdOrderByCreatedAtDesc(dossierId).map { it.toInfo(objectMapper) }
+
+    private fun requireDossierForClient(
+        dossierId: UUID,
+        clientId: UUID,
+    ) {
+        val dossier =
+            dossiers.findById(dossierId).orElseThrow {
+                ResponseStatusException(HttpStatus.NOT_FOUND, "Dossier introuvable")
+            }
+        if (dossier.clientId != clientId) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Le dossier appartient à un autre client")
+        }
     }
 
     @Transactional
@@ -158,5 +205,17 @@ class CautionModuleApiService(
             rccm = rccm,
             accountNumber = accountNumber,
             agence = agence,
+        )
+
+    private fun CautionDossier.toInfo(objectMapper: ObjectMapper): CautionDossierInfo =
+        CautionDossierInfo(
+            id = requireNotNull(id),
+            clientId = clientId,
+            referenceNumber = referenceNumber,
+            status = status,
+            content = objectMapper.readValue<Map<String, String>>(contentJson),
+            createdBy = createdBy,
+            createdAt = createdAt,
+            updatedAt = updatedAt,
         )
 }

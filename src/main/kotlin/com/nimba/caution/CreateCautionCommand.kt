@@ -16,4 +16,6 @@ data class CreateCautionCommand(
     val createdBy: UUID,
     /** Only takes effect for the very first caution ever created — see `CautionNumberGenerator`'s KDoc. */
     val startingReferenceSequence: Int? = null,
+    /** The dossier this document belongs to, or null when created standalone. */
+    val dossierId: UUID? = null,
 )

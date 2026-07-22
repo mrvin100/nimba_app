@@ -175,7 +175,7 @@ class SecurityConfig(
                 // The client registry and the Caution module (SMS, ACF...) back
                 // DCM's tender-guarantee business, distinct from the DRI's dossier
                 // surface entirely — DCM-only, no other direction reads or writes.
-                it.requestMatchers("$base/clients/**", "$base/cautions/**").hasRole("DCM_MEMBER")
+                it.requestMatchers("$base/clients/**", "$base/cautions/**", "$base/caution-dossiers/**").hasRole("DCM_MEMBER")
                 // Constituting the dossier (create/update, TA upload, FA edit/publish,
                 // trade generation) belongs to the DRI direction. The role hierarchy
                 // lets a DRI manager pass this check.

@@ -24,4 +24,6 @@ interface CautionRepository : JpaRepository<Caution, UUID> {
         @Param("status") status: CautionStatus?,
         pageable: Pageable,
     ): Page<Caution>
+
+    fun findByDossierIdOrderByCreatedAtDesc(dossierId: UUID): List<Caution>
 }

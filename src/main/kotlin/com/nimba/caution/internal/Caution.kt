@@ -39,6 +39,10 @@ class Caution(
     @GeneratedValue(strategy = GenerationType.UUID)
     var id: UUID? = null
 
+    /** The dossier this document belongs to, or null when created standalone (every pre-dossier document stays valid). */
+    @Column(name = "dossier_id")
+    var dossierId: UUID? = null
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     var status: CautionStatus = CautionStatus.DRAFT
