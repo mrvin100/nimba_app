@@ -125,7 +125,7 @@ class CautionModuleApiService(
         val missing =
             CautionFieldRegistry
                 .allFieldsFor(documentType)
-                .filter { content[it.key].isNullOrBlank() }
+                .filter { !it.optional && content[it.key].isNullOrBlank() }
         if (missing.isNotEmpty()) {
             throw ResponseStatusException(
                 HttpStatus.BAD_REQUEST,

@@ -8,13 +8,22 @@ enum class CautionFieldType {
 
     /** A currency code (GNF, USD, EUR...) — the frontend renders a select, defaulting to GNF. */
     CURRENCY,
+
+    /** A signatory's civility (Monsieur / Madame) — the frontend renders a select; blank means it is omitted from the document. */
+    CIVILITY,
 }
 
-/** One field of a document type's form, exposed as metadata so the frontend never hardcodes a per-type page. */
+/**
+ * One field of a document type's form, exposed as metadata so the frontend
+ * never hardcodes a per-type page. [optional] fields (e.g. a signatory's
+ * civility) may be left blank: they are not required to create or finalize a
+ * document, and simply do not print when unset.
+ */
 data class CautionFieldDefinition(
     val key: String,
     val label: String,
     val type: CautionFieldType,
+    val optional: Boolean = false,
 )
 
 /**
@@ -38,8 +47,10 @@ object CautionFieldRegistry {
             CautionFieldDefinition("devise", "Devise", CautionFieldType.CURRENCY),
             CautionFieldDefinition("montant", "Montant", CautionFieldType.AMOUNT),
             CautionFieldDefinition("dateEmission", "Date d'émission", CautionFieldType.DATE),
+            CautionFieldDefinition("signataire1Civilite", "Signataire 1 — Civilité", CautionFieldType.CIVILITY, optional = true),
             CautionFieldDefinition("signataire1Nom", "Signataire 1 — Nom complet", CautionFieldType.TEXT),
             CautionFieldDefinition("signataire1Titre", "Signataire 1 — Titre", CautionFieldType.TEXT),
+            CautionFieldDefinition("signataire2Civilite", "Signataire 2 — Civilité", CautionFieldType.CIVILITY, optional = true),
             CautionFieldDefinition("signataire2Nom", "Signataire 2 — Nom complet", CautionFieldType.TEXT),
             CautionFieldDefinition("signataire2Titre", "Signataire 2 — Titre", CautionFieldType.TEXT),
         )
@@ -52,6 +63,7 @@ object CautionFieldRegistry {
                     CautionFieldDefinition("dateExpiration", "Date d'expiration de la garantie", CautionFieldType.DATE),
                 ),
             CautionDocumentType.ACF to emptyList(),
+            CautionDocumentType.AFC to emptyList(),
         )
 
     fun specificFieldsFor(type: CautionDocumentType): List<CautionFieldDefinition> = SPECIFIC_FIELDS.getValue(type)

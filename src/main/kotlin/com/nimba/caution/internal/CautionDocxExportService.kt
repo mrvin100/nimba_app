@@ -4,14 +4,17 @@ import com.nimba.caution.CautionClientSnapshotInfo
 import com.nimba.caution.CautionDocumentType
 import com.nimba.caution.CautionInfo
 import com.nimba.caution.CautionModuleApi
-import com.nimba.caution.CautionStatus
+import com.nimba.client.ClientModuleApi
+import com.nimba.client.getOrThrow
 import com.nimba.shared.amountInWords
 import org.apache.poi.xwpf.usermodel.ParagraphAlignment
 import org.apache.poi.xwpf.usermodel.TableRowAlign
+import org.apache.poi.xwpf.usermodel.TableWidthType
 import org.apache.poi.xwpf.usermodel.XWPFDocument
 import org.apache.poi.xwpf.usermodel.XWPFParagraph
 import org.apache.poi.xwpf.usermodel.XWPFTable
 import org.apache.poi.xwpf.usermodel.XWPFTableCell
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.STShd
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -43,19 +46,22 @@ private fun plain(text: String) = Segment(text)
 private fun bold(text: String) = Segment(text, bold = true)
 
 /**
- * Builds the Word (.docx) export of a finalized caution as an exact replica
- * of the bank's real documents (ground truth: `CAUTION.docx` and `ATTESTATION
- * DE CAPACITE FINANCIERE.docx` in docs/caution): A4, the templates' margins,
+ * Builds the Word (.docx) export of a caution as an exact replica of the
+ * bank's real documents (ground truth: `CAUTION.docx` and `ATTESTATION DE
+ * CAPACITE FINANCIERE.docx` in docs/caution): A4, the templates' margins,
  * Tahoma justified body, the double-bordered/shaded header box, and every
- * bold run matching the reference exactly. Only a FINAL caution has a client
- * snapshot to print, mirroring the PV export's own gate. Signatories are the
- * caution's own content fields (not a bank-wide setting) — a signatory can
- * differ from one document to the next (delegation), so each document keeps
- * its own answer once finalized, same as every other entered field.
+ * bold run matching the reference exactly. A FINAL caution prints its frozen
+ * client snapshot; a DRAFT is exportable too, as a preview, rendered from the
+ * live client record so the DCM can check the document before finalizing.
+ * Signatories are the caution's own content fields (not a bank-wide setting):
+ * a signatory can differ from one document to the next (delegation), so each
+ * document keeps its own answer once finalized, same as every other entered
+ * field.
  */
 @Service
 class CautionDocxExportService(
     private val cautions: CautionModuleApi,
+    private val clients: ClientModuleApi,
 ) {
     private val shortDate = DateTimeFormatter.ofPattern("dd-MM-uu")
 
@@ -63,17 +69,15 @@ class CautionDocxExportService(
     fun export(id: UUID): CautionExport {
         val caution =
             cautions.findById(id) ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Caution introuvable")
-        if (caution.status != CautionStatus.FINAL) {
-            throw ResponseStatusException(HttpStatus.CONFLICT, "La caution doit être finalisée avant d'être exportée")
-        }
-        val snapshot = requireNotNull(caution.clientSnapshot) { "A FINAL caution always carries a client snapshot" }
+        // A finalized caution carries its frozen snapshot; a draft preview reads the client live.
+        val snapshot = caution.clientSnapshot ?: liveSnapshot(caution.clientId)
 
         val document = XWPFDocument()
         setUpPage(document)
-        repeat(4) { spacer(document) }
         when (caution.documentType) {
             CautionDocumentType.SMS -> renderSms(document, caution, snapshot.raisonSociale.orRas(), snapshot.agence)
             CautionDocumentType.ACF -> renderAcf(document, caution, snapshot)
+            CautionDocumentType.AFC -> renderAfc(document, caution, snapshot)
         }
 
         val bytes =
@@ -82,7 +86,22 @@ class CautionDocxExportService(
                 document.close()
                 out.toByteArray()
             }
-        return CautionExport("caution-${caution.referenceNumber}.docx", bytes)
+        val suffix = if (caution.clientSnapshot == null) "-brouillon" else ""
+        return CautionExport("caution-${caution.referenceNumber}$suffix.docx", bytes)
+    }
+
+    /** The live client record projected onto the same shape as the frozen snapshot, for draft previews. */
+    private fun liveSnapshot(clientId: UUID): CautionClientSnapshotInfo {
+        val client = clients.getOrThrow(clientId)
+        return CautionClientSnapshotInfo(
+            matricule = client.matricule,
+            raisonSociale = client.raisonSociale,
+            sigle = client.sigle,
+            adressePhysique = client.adressePhysique,
+            rccm = client.rccm,
+            accountNumber = client.accountNumber,
+            agence = client.agence,
+        )
     }
 
     // ---- Caution de Soumission (SMS) ---------------------------------------------------
@@ -136,9 +155,9 @@ class CautionDocxExportService(
                     "au Registre de Commerce et du Crédit Mobilier de Conakry sous le numéro GC–KAL/040.445A/2012 du " +
                     "17 Mai 2012, représentée par ",
             ),
-            bold("${signatoryName(c, 1)}, ${signatoryTitle(c, 1)}"),
+            bold(signatoryLabel(c, 1)),
             plain(" et "),
-            bold("${signatoryName(c, 2)}, ${signatoryTitre2(c)}"),
+            bold(signatoryLabel(c, 2)),
             plain(" dûment habilités, ci-après dénommée "),
             bold("« la Banque »"),
             plain(" ;"),
@@ -149,7 +168,7 @@ class CautionDocxExportService(
                 "Nous engageons par la présente, sans réserve et irrévocablement, à vous payer à première demande, " +
                     "toute somme d'argent que vous pourriez réclamer dans la limite de ",
             ),
-            bold(amountClause(c)),
+            bold("${amountClause(c)}."),
         )
         paragraph(
             document,
@@ -201,23 +220,44 @@ class CautionDocxExportService(
 
     // ---- Attestation de Capacité Financière (ACF) --------------------------------------
 
+    /**
+     * Renders the Attestation de Capacité Financière as a faithful replica of
+     * `ATTESTATION DE CAPACITE FINANCIERE.docx`: a page-centered header box at
+     * the model's width, the two reference lines fully bold, and the body with
+     * exactly the model's bold runs — the company name, its acronym and its
+     * account number are bold; its address, RCCM and agency are not (matching
+     * the reference). The amount is bold as a whole. Civility prefixes
+     * (Monsieur/Madame) are intentionally dropped, as on the caution, so an
+     * unset signatory never prints a gendered title.
+     */
     private fun renderAcf(
         document: XWPFDocument,
         caution: CautionInfo,
         snapshot: CautionClientSnapshotInfo,
     ) {
         val c = caution.content
-        headerBox(document, "ATTESTATION DE CAPACITE FINANCIERE", caution.referenceNumber)
+        headerBox(
+            document,
+            "ATTESTATION DE CAPACITE FINANCIERE",
+            caution.referenceNumber,
+            widthDxa = ACF_HEADER_WIDTH,
+            centered = true,
+        )
+        spacer(document)
         spacer(document)
 
-        paragraph(document, "Adressée à ${c["beneficiaire"].orRas()}")
+        mixedParagraph(
+            document,
+            plain("Adressée à "),
+            bold(c["beneficiaire"].orRas()),
+            alignment = ParagraphAlignment.CENTER,
+        )
         spacer(document)
-        paragraph(document, "N/Référence : N°${caution.referenceNumber}")
-        paragraph(document, "V/Référence : ${c["referenceAppelOffres"].orRas()}")
-        paragraph(document, c["objetMarche"].orRas())
+        mixedParagraph(document, bold("N/Référence : N°${caution.referenceNumber}"), alignment = ParagraphAlignment.LEFT)
+        mixedParagraph(document, bold("V/Référence : ${c["referenceAppelOffres"].orRas()}"))
+        mixedParagraph(document, bold(c["objetMarche"].orRas()))
         spacer(document)
 
-        val sigle = snapshot.sigle?.takeIf { it.isNotBlank() }?.let { " en abrégé « $it »" } ?: ""
         mixedParagraph(
             document,
             plain("Nous soussignés, "),
@@ -225,30 +265,37 @@ class CautionDocxExportService(
             plain(", Société Anonyme au Capital de "),
             bold("GNF 200 000 000 000"),
             plain(
-                ", dont le Siège Social est à Almamya-Commune de Kaloum, B.P. : 343, Conakry - République de Guinée, " +
+                ", dont le Siège Social est à Almamya - Commune de Kaloum, B.P. : 343, Conakry - République de Guinée, " +
                     "inscrite sur la liste des banques et établissements financiers sous le numéro 021 et immatriculée " +
-                    "au Registre de Commerce et du Crédit Mobilier de Conakry sous le numéro GC–KAL/040.445A/2012 du " +
+                    "au Registre de Commerce et du Crédit Mobilier de Conakry sous le numéro GC – KAL/040.445A/2012 du " +
                     "17 Mai 2012, représentée par ",
             ),
-            bold("${signatoryName(c, 1)}, ${signatoryTitle(c, 1)}"),
+            bold(signatoryLabel(c, 1)),
             plain(" et "),
-            bold("${signatoryName(c, 2)}, ${signatoryTitre2(c)}"),
+            bold(signatoryLabel(c, 2)),
             plain(", en vertu des pouvoirs dont ils sont investis."),
         )
-        mixedParagraph(
-            document,
-            plain("Certifions par la présente que la société "),
-            bold("${raisonSocialeOf(snapshot)}$sigle"),
-            plain(", siège social "),
-            bold(snapshot.adressePhysique.orRas()),
-            plain(", enregistrée au RCCM "),
-            bold(snapshot.rccm.orRas()),
-            plain(" est titulaire du compte N°"),
-            bold(snapshot.accountNumber.orRas()),
-            plain(" ouvert dans nos livres à l'Agence "),
-            bold(snapshot.agence.orRas()),
-            plain("."),
-        )
+
+        val certifySegments =
+            buildList {
+                add(plain("Certifions par la présente que la société "))
+                add(bold(snapshot.raisonSociale.orRas()))
+                snapshot.sigle?.takeIf { it.isNotBlank() }?.let {
+                    add(plain(" en abrégé « "))
+                    add(bold(it))
+                    add(plain(" »"))
+                }
+                add(
+                    plain(
+                        " siège social ${snapshot.adressePhysique.orRas()}, enregistrée au RCCM/${snapshot.rccm.orRas()} " +
+                            "est titulaire du compte N°",
+                    ),
+                )
+                add(bold(snapshot.accountNumber.orRas()))
+                add(plain(" ouvert dans nos livres à l'Agence ${snapshot.agence.orRas()}."))
+            }
+        mixedParagraph(document, *certifySegments.toTypedArray())
+
         mixedParagraph(
             document,
             plain("L'Entreprise dispose à notre connaissance les moyens financiers de "),
@@ -258,12 +305,89 @@ class CautionDocxExportService(
         spacer(document)
         paragraph(document, "Fait pour servir et valoir ce que de droit.")
         val faitLe = document.createParagraph()
+        faitLe.alignment = ParagraphAlignment.RIGHT
         addRun(faitLe, "Fait à Conakry, le ${fmtLong(c["dateEmission"])}", bold = true)
         spacer(document)
         renderSignatureBlock(document, c)
     }
 
-    private fun raisonSocialeOf(snapshot: CautionClientSnapshotInfo): String = snapshot.raisonSociale
+    // ---- Attestation de Facilité de Crédit (AFC) ---------------------------------------
+
+    /**
+     * Renders the Attestation de Facilité de Crédit as a faithful replica of
+     * `AFC  LOT8.docx`: a page-centered header box at the model's width, a
+     * centered "Adressée à …" line, and the two credit clauses with the model's
+     * bold runs — the bank certifies it would grant credit up to the amount, to
+     * the company, for the market. The amount prints without the leading
+     * currency code (the words carry the currency), matching the model.
+     */
+    private fun renderAfc(
+        document: XWPFDocument,
+        caution: CautionInfo,
+        snapshot: CautionClientSnapshotInfo,
+    ) {
+        val c = caution.content
+        headerBox(document, "ATTESTATION DE FACILITE DE CREDIT", caution.referenceNumber, widthDxa = AFC_HEADER_WIDTH, centered = true)
+        spacer(document)
+        spacer(document)
+
+        mixedParagraph(
+            document,
+            plain("Adressée à "),
+            bold(c["beneficiaire"].orRas()),
+            alignment = ParagraphAlignment.CENTER,
+        )
+        spacer(document)
+
+        mixedParagraph(
+            document,
+            plain("Nous soussignés, "),
+            bold("Afriland First Bank Guinée S.A."),
+            plain(", Société Anonyme au Capital de "),
+            bold("GNF 200 000 000 000"),
+            plain(
+                ", dont le Siège Social est à Almamya - Commune de Kaloum, B.P. : 343, Conakry - République de Guinée, " +
+                    "inscrite sur la liste des banques et établissements financiers sous le numéro 021 et immatriculée " +
+                    "au Registre de Commerce et du Crédit Mobilier de Conakry sous le numéro GC – KAL/040.445A/2012 du " +
+                    "17 Mai 2012, représentée par ",
+            ),
+            bold(signatoryLabel(c, 1)),
+            plain(" et "),
+            bold(signatoryLabel(c, 2)),
+            plain(" dûment habilités."),
+        )
+        mixedParagraph(
+            document,
+            plain("Attestons par la présente que nous serions disposés à consentir nos concours à hauteur de "),
+            bold(amountClause(c, withCurrencyCode = false)),
+            plain(" à la "),
+            bold(snapshot.raisonSociale.orRas()),
+            plain(" dans le cadre du Marché de l'appel d'offres National "),
+            bold(c["referenceAppelOffres"].orRas()),
+            plain(" relatif aux "),
+            bold(c["objetMarche"].orRas()),
+            plain("."),
+        )
+        mixedParagraph(
+            document,
+            plain("Cette attestation est délivrée à la "),
+            bold(snapshot.raisonSociale.orRas()),
+            plain(", siège social ${snapshot.adressePhysique.orRas()}, immatriculée sous le "),
+            bold("N°RCCM/${snapshot.rccm.orRas()}"),
+            plain(" pour servir et faire valoir ce que de droit."),
+        )
+        paragraph(
+            document,
+            "Ledit accompagnement se fera sous réserve de la validation par notre comité de Crédit Compétent, seul " +
+                "organe habilité à statuer en matière de crédit dans notre institution.",
+        )
+        paragraph(document, "En foi de quoi, la présente certification est établie pour servir et faire valoir ce que de droit.")
+        val faitLe = document.createParagraph()
+        faitLe.alignment = ParagraphAlignment.RIGHT
+        addRun(faitLe, "Fait à Conakry, le ${fmtLong(c["dateEmission"])}", bold = true)
+        spacer(document)
+        renderSignatureBlock(document, c)
+    }
 
     // ---- Shared rendering helpers -------------------------------------------------------
 
@@ -277,42 +401,95 @@ class CautionDocxExportService(
         index: Int,
     ): String = content["signataire${index}Titre"].orRas()
 
-    /** Kept as its own function only so the mixed-paragraph call sites read symmetrically; identical to [signatoryTitle]. */
-    private fun signatoryTitre2(content: Map<String, String>): String = signatoryTitle(content, 2)
+    /**
+     * "Monsieur Nom, Titre" — how a signatory appears inside the body prose. The
+     * civility prefix only shows when it was entered (the models carry it); an
+     * unset civility is simply omitted rather than printing a placeholder.
+     */
+    private fun signatoryLabel(
+        content: Map<String, String>,
+        index: Int,
+    ): String {
+        val civility = content["signataire${index}Civilite"]?.takeIf { it.isNotBlank() }?.let { "$it " } ?: ""
+        return "$civility${signatoryName(content, index)}, ${signatoryTitle(content, index)}"
+    }
 
+    /**
+     * The closing signature block: a full page-width, borderless two-column
+     * table. Row 1 holds the two signatories' titles, row 2 their names, all
+     * bold. Signatory 1 is pinned left, signatory 2 right, and a generous gap
+     * is left between the two rows so the signatures can be handwritten there.
+     */
     private fun renderSignatureBlock(
         document: XWPFDocument,
         content: Map<String, String>,
     ) {
         val table = document.createTable(2, 2)
-        table.setWidth(100)
+        table.setWidthType(TableWidthType.DXA)
+        table.setWidth(CONTENT_WIDTH)
         borderless(table)
-        setCell(table.getRow(0).getCell(0), signatoryTitle(content, 1), bold = true, alignment = ParagraphAlignment.LEFT)
-        setCell(table.getRow(0).getCell(1), signatoryTitle(content, 2), bold = true, alignment = ParagraphAlignment.RIGHT)
-        table.getRow(1).getCell(0).addParagraph()
-        table.getRow(1).getCell(1).addParagraph()
-        setCell(table.getRow(1).getCell(0), signatoryName(content, 1), alignment = ParagraphAlignment.LEFT)
-        setCell(table.getRow(1).getCell(1), signatoryName(content, 2), alignment = ParagraphAlignment.RIGHT)
+        val half = (CONTENT_WIDTH / 2).toString()
+        setCell(table.getRow(0).getCell(0), signatoryTitle(content, 1), bold = true, alignment = ParagraphAlignment.LEFT, width = half)
+        setCell(table.getRow(0).getCell(1), signatoryTitle(content, 2), bold = true, alignment = ParagraphAlignment.RIGHT, width = half)
+        setCell(
+            table.getRow(1).getCell(0),
+            signatoryName(content, 1),
+            bold = true,
+            alignment = ParagraphAlignment.LEFT,
+            width = half,
+            spacingBefore = SIGNATURE_GAP,
+        )
+        setCell(
+            table.getRow(1).getCell(1),
+            signatoryName(content, 2),
+            bold = true,
+            alignment = ParagraphAlignment.RIGHT,
+            width = half,
+            spacingBefore = SIGNATURE_GAP,
+        )
     }
 
-    /** "GNF 238 756 476 (Deux Cent ... Seize Francs Guinéens)" — bold as a whole, since the amount and its currency are entered via the creation form. */
-    private fun amountClause(content: Map<String, String>): String {
-        val amount = content["montant"]?.toBigDecimalOrNull() ?: return "RAS"
+    /**
+     * "GNF 238 756 476 (Deux Cent ... Seize Francs Guinéens)" — bold as a whole,
+     * since the amount and its currency are entered via the creation form. The
+     * raw amount is reduced to its digits first, so a value typed with spaces or
+     * thousands separators ("238 756 476") still resolves instead of silently
+     * falling back to "RAS". No trailing punctuation: each caller adds its own,
+     * since the clause ends a sentence in one document and continues it in another.
+     */
+    private fun amountClause(
+        content: Map<String, String>,
+        withCurrencyCode: Boolean = true,
+    ): String {
+        val digits = content["montant"]?.filter(Char::isDigit)?.takeIf { it.isNotEmpty() }
+        val amount = digits?.toBigDecimal() ?: return "RAS"
         val currency = content["devise"]?.takeIf { it.isNotBlank() } ?: "GNF"
-        return "$currency ${grouped(amount)} (${amount.amountInWords(currency)})."
+        // The attestation de facilité prints the amount without the leading currency code (the words carry the currency).
+        val prefix = if (withCurrencyCode) "$currency " else ""
+        return "$prefix${grouped(amount)} (${amount.amountInWords(currency)})"
     }
 
     // ---- Header box ---------------------------------------------------------------------
 
-    /** The double-bordered, 25%-shaded title box every reference template opens with — title then reference number, both bold and centered. */
+    /**
+     * The double-bordered, 25%-shaded title box every reference template opens
+     * with: a fixed-width rectangle holding the title then the reference number,
+     * both bold and centered. Pinned in DXA (with the cell at the same width) so
+     * it renders as a clean banner rather than shrinking to the text. The
+     * attestation matches its model's narrower, page-centered box; the caution
+     * spans the full writable width.
+     */
     private fun headerBox(
         document: XWPFDocument,
         title: String,
         referenceNumber: String,
+        widthDxa: Int = CONTENT_WIDTH,
+        centered: Boolean = false,
     ) {
         val table = document.createTable(1, 1)
-        table.setWidth(70)
-        table.setTableAlignment(TableRowAlign.CENTER)
+        table.setWidthType(TableWidthType.DXA)
+        table.setWidth(widthDxa)
+        if (centered) table.setTableAlignment(TableRowAlign.CENTER)
         val borderSize = 18
         table.setTopBorder(XWPFTable.XWPFBorderType.DOUBLE, borderSize, 0, "auto")
         table.setBottomBorder(XWPFTable.XWPFBorderType.DOUBLE, borderSize, 0, "auto")
@@ -320,13 +497,27 @@ class CautionDocxExportService(
         table.setRightBorder(XWPFTable.XWPFBorderType.DOUBLE, borderSize, 0, "auto")
 
         val cell = table.getRow(0).getCell(0)
-        cell.setColor("D9D9D9")
+        cell.widthType = TableWidthType.DXA
+        cell.setWidth(widthDxa.toString())
+        cell.verticalAlignment = XWPFTableCell.XWPFVertAlign.CENTER
+        applyPct25Shading(cell)
         val titlePara = cell.paragraphs.first()
         titlePara.alignment = ParagraphAlignment.CENTER
+        titlePara.spacingBefore = 80
         addRun(titlePara, title, bold = true, size = TITLE_SIZE)
         val refPara = cell.addParagraph()
         refPara.alignment = ParagraphAlignment.CENTER
+        refPara.spacingAfter = 80
         addRun(refPara, "N° $referenceNumber", bold = true, size = TITLE_SIZE)
+    }
+
+    /** The reference templates fill the header with a 25% pattern shade (w:shd val="pct25"); replicated here rather than approximated with a solid fill. */
+    private fun applyPct25Shading(cell: XWPFTableCell) {
+        val tcPr = cell.ctTc.tcPr ?: cell.ctTc.addNewTcPr()
+        val shd = if (tcPr.isSetShd) tcPr.shd else tcPr.addNewShd()
+        shd.`val` = STShd.PCT_25
+        shd.color = "auto"
+        shd.fill = "auto"
     }
 
     // ---- POI helpers (same conventions as the FA/PV/FMP exports) -----------------------
@@ -366,13 +557,14 @@ class CautionDocxExportService(
         addRun(p, text)
     }
 
-    /** A justified paragraph built from a sequence of bold/plain runs — how every entered field gets bolded inline with fixed prose. */
+    /** A paragraph built from a sequence of bold/plain runs — how every entered field gets bolded inline with fixed prose. Justified unless a caller overrides it. */
     private fun mixedParagraph(
         document: XWPFDocument,
         vararg segments: Segment,
+        alignment: ParagraphAlignment = ParagraphAlignment.BOTH,
     ) {
         val p = document.createParagraph()
-        p.alignment = ParagraphAlignment.BOTH
+        p.alignment = alignment
         p.spacingAfter = 160
         segments.forEach { seg -> addRun(p, seg.text, bold = seg.bold) }
     }
@@ -410,9 +602,16 @@ class CautionDocxExportService(
         text: String,
         bold: Boolean = false,
         alignment: ParagraphAlignment = ParagraphAlignment.LEFT,
+        width: String? = null,
+        spacingBefore: Int = 0,
     ) {
+        width?.let {
+            cell.widthType = TableWidthType.DXA
+            cell.setWidth(it)
+        }
         val p = cell.paragraphs.first()
         p.alignment = alignment
+        if (spacingBefore > 0) p.spacingBefore = spacingBefore
         addRun(p, text, bold = bold)
     }
 
@@ -446,5 +645,17 @@ class CautionDocxExportService(
         const val FONT = "Tahoma"
         const val BODY_SIZE = 11
         const val TITLE_SIZE = 14
+
+        /** Writable page width in twips: A4 (11906) minus the left (1417) and right (1133) margins set in [setUpPage]. */
+        const val CONTENT_WIDTH = 9356
+
+        /** The attestation model's header box width in twips (page-centered, narrower than the caution's full-width banner). */
+        const val ACF_HEADER_WIDTH = 7896
+
+        /** The attestation de facilité model's header box width in twips (page-centered). */
+        const val AFC_HEADER_WIDTH = 6521
+
+        /** Vertical gap (twips, ~45pt) left between a signatory's title and name so the signature can be handwritten between them. */
+        const val SIGNATURE_GAP = 900
     }
 }

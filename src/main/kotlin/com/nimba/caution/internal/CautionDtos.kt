@@ -97,10 +97,11 @@ data class CautionFieldDefinitionResponse(
     val key: String,
     val label: String,
     val type: CautionFieldType,
+    val optional: Boolean,
 )
 
 internal fun CautionFieldDefinition.toResponse(): CautionFieldDefinitionResponse =
-    CautionFieldDefinitionResponse(key = key, label = label, type = type)
+    CautionFieldDefinitionResponse(key = key, label = label, type = type, optional = optional)
 
 internal fun documentTypeResponses(): List<CautionDocumentTypeResponse> =
     CautionDocumentType.entries.map { type ->
