@@ -61,12 +61,18 @@ class CautionDossierController(
     @GetMapping("/{id}/notification/docx")
     fun exportNotification(
         @PathVariable id: UUID,
-    ): ResponseEntity<ByteArray> {
-        val export = docxExport.exportDossierNotification(id)
-        return ResponseEntity
+    ): ResponseEntity<ByteArray> = docx(docxExport.exportDossierNotification(id))
+
+    /** The dossier's Fiche d'approbation as a Word (.docx) download. */
+    @GetMapping("/{id}/fiche/docx")
+    fun exportFiche(
+        @PathVariable id: UUID,
+    ): ResponseEntity<ByteArray> = docx(docxExport.exportDossierFiche(id))
+
+    private fun docx(export: CautionExport): ResponseEntity<ByteArray> =
+        ResponseEntity
             .ok()
             .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"${export.filename}\"")
             .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
             .body(export.content)
-    }
 }

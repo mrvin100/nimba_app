@@ -16,6 +16,7 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.web.server.ResponseStatusException
 import java.io.ByteArrayInputStream
+import java.time.LocalDate
 import java.util.UUID
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -36,6 +37,14 @@ class CautionDossierTest(
 
     private fun clientId(dcm: UUID): UUID =
         clients.create(CreateClientCommand("M-${UUID.randomUUID()}", "SOCIETE TEST", dcm, agence = "Kaloum")).id
+
+    private fun docText(bytes: ByteArray): String =
+        XWPFDocument(ByteArrayInputStream(bytes)).use { doc ->
+            buildString {
+                doc.paragraphs.forEach { appendLine(it.text) }
+                doc.tables.forEach { t -> t.rows.forEach { r -> r.tableCells.forEach { appendLine(it.text) } } }
+            }
+        }
 
     private val smsContent =
         mapOf(
@@ -152,5 +161,63 @@ class CautionDossierTest(
         assertContains(text, "III. CONDITIONS DE BANQUE :")
         assertContains(text, "Com. d'engagement :")
         assertContains(text, "QUENTIN DETCHENOU")
+    }
+
+    @Test
+    fun `exports the dossier fiche with its sections and computed totals`() {
+        val dcm = dcmMemberId()
+        val client =
+            clients
+                .create(
+                    CreateClientCommand(
+                        matricule = "M-${UUID.randomUUID()}",
+                        raisonSociale = "SOCIETE GUINEE BATI BUSINESS SARL",
+                        createdBy = dcm,
+                        accountNumber = "0101788201 05",
+                        agence = "KALOUM",
+                        gestionnaire = "DGA3",
+                        dateEntreeRelation = LocalDate.of(2020, 2, 20),
+                    ),
+                ).id
+        val dossier =
+            cautions.createDossier(
+                CreateDossierCommand(
+                    clientId = client,
+                    content =
+                        mapOf(
+                            "beneficiaire" to "MINISTERE DE L'ELEVAGE",
+                            "referenceAppelOffres" to "N°01/MAGEL/DNAPA/PRMP/2026",
+                            "objetMarche" to "Travaux Lot 4, Lot6 et Lot8",
+                            "mouvementConfie" to "1 136 805 909",
+                            "solde" to "8 721 004",
+                            "soldeDate" to "22/07/2025",
+                            "sollicitationCaution" to "Lot 4 : 306 000 000",
+                            "engSoumissionEncours" to "987 828 828",
+                            "engSoumissionSollicite" to "306 000 000",
+                            "engTresorerieEncours" to "0",
+                            "engTresorerieSollicite" to "0",
+                            "lots" to "Lot 4, Lot 6, Lot 8",
+                            "cond_0_0" to "3 457 800",
+                            "cond_1_0" to "3 610 800",
+                            "cond_2_0" to "565 000",
+                            "cond_3_0" to "4 720 000",
+                        ),
+                    createdBy = dcm,
+                ),
+            )
+
+        val result = export.exportDossierFiche(dossier.id)
+        val text = docText(result.content)
+
+        assertContains(text, "FICHE D'APPROBATION DE CAUTION DE SOUMISSION")
+        assertContains(text, "1- PRESENTATION DU CLIENT")
+        assertContains(text, "SOCIETE GUINEE BATI BUSINESS SARL")
+        assertContains(text, "DGA3")
+        assertContains(text, "20/02/2020")
+        assertContains(text, "6- CONDITIONS DE BANQUES ET RENTABILITE")
+        assertContains(text, "MT TTC Lot 4")
+        // Computed column total for Lot 4: 3 457 800 + 3 610 800 + 565 000 + 4 720 000.
+        assertContains(text, "12 353 600")
+        assertContains(text, "7- APPROBATIONS")
     }
 }

@@ -4,9 +4,14 @@ import com.nimba.caution.CautionClientSnapshotInfo
 import com.nimba.caution.CautionDocumentType
 import com.nimba.caution.CautionInfo
 import com.nimba.caution.CautionModuleApi
+import com.nimba.client.ClientInfo
 import com.nimba.client.ClientModuleApi
 import com.nimba.client.getOrThrow
+import com.nimba.identity.IdentityModuleApi
+import com.nimba.identity.OrganizationLogo
 import com.nimba.shared.amountInWords
+import org.apache.poi.util.Units
+import org.apache.poi.xwpf.usermodel.Document
 import org.apache.poi.xwpf.usermodel.ParagraphAlignment
 import org.apache.poi.xwpf.usermodel.TableRowAlign
 import org.apache.poi.xwpf.usermodel.TableWidthType
@@ -19,6 +24,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.math.BigDecimal
 import java.math.BigInteger
@@ -28,6 +34,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
+import javax.imageio.ImageIO
 
 /** One exported caution document, ready to stream back as a download. */
 data class CautionExport(
@@ -62,6 +69,7 @@ private fun bold(text: String) = Segment(text, bold = true)
 class CautionDocxExportService(
     private val cautions: CautionModuleApi,
     private val clients: ClientModuleApi,
+    private val identity: IdentityModuleApi,
 ) {
     private val shortDate = DateTimeFormatter.ofPattern("dd-MM-uu")
 
@@ -127,6 +135,33 @@ class CautionDocxExportService(
                 out.toByteArray()
             }
         return CautionExport("notification-${dossier.referenceNumber}.docx", bytes)
+    }
+
+    /**
+     * The dossier's internal Fiche d'approbation de caution de soumission — the
+     * organisation logo, then the seven sections (client, documents, marché,
+     * sollicitations, engagements, conditions/rentabilité, approbations),
+     * rendered from the live client record and the figures entered on the
+     * dossier, with the totals computed.
+     */
+    @Transactional(readOnly = true)
+    fun exportDossierFiche(dossierId: UUID): CautionExport {
+        val dossier =
+            cautions.findDossier(dossierId)
+                ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Dossier introuvable")
+        val client = clients.getOrThrow(dossier.clientId)
+
+        val document = XWPFDocument()
+        setUpPage(document)
+        renderFiche(document, dossier.content, client, identity.organizationLogo())
+
+        val bytes =
+            ByteArrayOutputStream().use { out ->
+                document.write(out)
+                document.close()
+                out.toByteArray()
+            }
+        return CautionExport("fiche-approbation-${dossier.referenceNumber}.docx", bytes)
     }
 
     // ---- Caution de Soumission (SMS) ---------------------------------------------------
@@ -543,6 +578,252 @@ class CautionDocxExportService(
         }
     }
 
+    // ---- Fiche d'approbation (dossier companion) ---------------------------------------
+
+    /** One cell of a Fiche table. */
+    private data class FCell(
+        val text: String,
+        val bold: Boolean = false,
+        val alignment: ParagraphAlignment = ParagraphAlignment.LEFT,
+    )
+
+    private fun renderFiche(
+        document: XWPFDocument,
+        content: Map<String, String>,
+        client: ClientInfo,
+        logo: OrganizationLogo?,
+    ) {
+        val logoParagraph = document.createParagraph()
+        logoParagraph.alignment = ParagraphAlignment.CENTER
+        logo?.let { renderLogo(logoParagraph, it) }
+        val title = document.createParagraph()
+        title.alignment = ParagraphAlignment.CENTER
+        addRun(title, "FICHE D'APPROBATION DE CAUTION DE SOUMISSION", bold = true, size = TITLE_SIZE)
+        spacer(document)
+
+        val dateEntree = client.dateEntreeRelation?.format(DateTimeFormatter.ofPattern("dd/MM/uuuu"))
+
+        ficheSection(document, "1- PRESENTATION DU CLIENT")
+        ficheTable(
+            document,
+            listOf(3600, CONTENT_WIDTH - 3600),
+            listOf(
+                listOf(FCell("CLIENT", bold = true), FCell(client.raisonSociale)),
+                listOf(FCell("COMPTE", bold = true), FCell(client.accountNumber.orRas())),
+                listOf(FCell("AGENCE", bold = true), FCell(client.agence.orRas())),
+                listOf(FCell("GESTIONNAIRE", bold = true), FCell(client.gestionnaire.orRas())),
+                listOf(FCell("DATE ENTREE EN RELATION", bold = true), FCell(dateEntree.orRas())),
+                listOf(FCell("MOUVEMENT CONFIE", bold = true), FCell(content["mouvementConfie"].orRas())),
+                listOf(FCell("SOLDE AU ${content["soldeDate"].orRas()}", bold = true), FCell(content["solde"].orRas())),
+            ),
+        )
+
+        ficheSection(document, "2- DOCUMENTS A FOURNIR")
+        ficheTable(
+            document,
+            thirds(),
+            listOf(
+                headerCells(listOf("DESIGNATIONS", "OUI", "NON")),
+                docRow("DEMANDE", content["docDemande"]),
+                docRow("DAO", content["docDao"]),
+                docRow("COUVERTURE DES FRAIS", content["docCouvertureFrais"]),
+                docRow("AUTRES", content["docAutres"]),
+            ),
+        )
+
+        ficheSection(document, "3- DESCRIPTION DU MARCHE")
+        ficheTable(
+            document,
+            thirds(),
+            listOf(
+                headerCells(listOf("N° D'APPEL D'OFFRE", "MAITRE D'OUVRAGE", "OBJET")),
+                listOf(
+                    FCell(content["referenceAppelOffres"].orRas()),
+                    FCell(content["beneficiaire"].orRas()),
+                    FCell(content["objetMarche"].orRas()),
+                ),
+            ),
+        )
+
+        ficheSection(document, "4- SOLLICITATIONS")
+        ficheTable(
+            document,
+            listOf(3600, CONTENT_WIDTH - 3600),
+            listOf(
+                headerCells(listOf("DESIGNATIONS", "MONTANT")),
+                listOf(FCell("CAUTION", bold = true), FCell(content["sollicitationCaution"].orRas())),
+                listOf(FCell("PROMESSE DE FACILITE", bold = true), FCell(content["sollicitationPromesse"].orRas())),
+            ),
+        )
+
+        ficheSection(document, "5- ENGAGEMENTS DANS NOS LIVRES")
+        val trEnc = content["engTresorerieEncours"]
+        val trSol = content["engTresorerieSollicite"]
+        val soEnc = content["engSoumissionEncours"]
+        val soSol = content["engSoumissionSollicite"]
+        ficheTable(
+            document,
+            thirds(),
+            listOf(
+                headerCells(listOf("TYPES D'ENGAGEMENTS", "ENCOURS", "SOLLICITE")),
+                listOf(FCell("ENG. PAR TRESORERIE"), FCell(trEnc.orRas()), FCell(trSol.orRas())),
+                listOf(FCell("SOUMISSION"), FCell(soEnc.orRas()), FCell(soSol.orRas())),
+                listOf(
+                    FCell("TOTAL", bold = true),
+                    FCell(sumGrouped(listOf(trEnc, soEnc)), bold = true),
+                    FCell(sumGrouped(listOf(trSol, soSol)), bold = true),
+                ),
+            ),
+        )
+
+        ficheSection(document, "6- CONDITIONS DE BANQUES ET RENTABILITE")
+        renderFicheConditions(document, content)
+
+        ficheSection(document, "7- APPROBATIONS")
+        val approvers = listOf("AE", "DCM", "DRC", "DER", "EXCO")
+        val approvColumn = CONTENT_WIDTH / approvers.size
+        ficheTable(
+            document,
+            List(approvers.size) { approvColumn },
+            listOf(headerCells(approvers), List(approvers.size) { FCell(" ") }),
+        )
+    }
+
+    /**
+     * Section 6's conditions/rentabilité table, one column per lot. The per-lot,
+     * per-condition amounts are entered on the dossier (the bank's fee formulas
+     * are not derivable from the samples); the TOTAL row is the computed column
+     * sum.
+     */
+    private fun renderFicheConditions(
+        document: XWPFDocument,
+        content: Map<String, String>,
+    ) {
+        val lots =
+            content["lots"]
+                ?.split(",")
+                ?.map { it.trim() }
+                ?.filter { it.isNotEmpty() }
+                ?.takeIf { it.isNotEmpty() }
+                ?: listOf("Montant")
+        val conditionLabels = listOf("COM ENG", "F. CAUTION", "F. DELIVRANCE", "F. ATTESTATION")
+        val labelColumn = 3400
+        val lotColumn = (CONTENT_WIDTH - labelColumn) / lots.size
+        val widths = listOf(labelColumn) + List(lots.size) { lotColumn }
+
+        val rows = mutableListOf<List<FCell>>()
+        rows.add(headerCells(listOf("CONDITIONS DE BANQUE") + lots.map { "MT TTC $it" }))
+        conditionLabels.forEachIndexed { r, label ->
+            rows.add(listOf(FCell(label)) + lots.indices.map { l -> FCell(content["cond_${r}_$l"].orRas()) })
+        }
+        val totals =
+            listOf(FCell("TOTAL", bold = true)) +
+                lots.indices.map { l ->
+                    FCell(sumGrouped(conditionLabels.indices.map { r -> content["cond_${r}_$l"] }), bold = true)
+                }
+        rows.add(totals)
+        ficheTable(document, widths, rows)
+    }
+
+    private fun ficheSection(
+        document: XWPFDocument,
+        title: String,
+    ) {
+        val p = document.createParagraph()
+        p.spacingBefore = 160
+        p.spacingAfter = 60
+        addRun(p, title, bold = true)
+    }
+
+    /** Builds a thin-bordered table with fixed column widths (DXA) from rows of styled cells. */
+    private fun ficheTable(
+        document: XWPFDocument,
+        widths: List<Int>,
+        rows: List<List<FCell>>,
+    ) {
+        val table = document.createTable(rows.size, widths.size)
+        table.setWidthType(TableWidthType.DXA)
+        table.setWidth(widths.sum())
+        thinBorders(table)
+        rows.forEachIndexed { r, cells ->
+            val row = table.getRow(r)
+            cells.forEachIndexed { c, cell ->
+                val tc = row.getCell(c)
+                tc.widthType = TableWidthType.DXA
+                tc.setWidth(widths[c].toString())
+                val p = tc.paragraphs.first()
+                p.alignment = cell.alignment
+                p.spacingAfter = 0
+                addRun(p, cell.text, bold = cell.bold)
+            }
+        }
+    }
+
+    private fun headerCells(labels: List<String>): List<FCell> = labels.map { FCell(it, bold = true) }
+
+    private fun docRow(
+        label: String,
+        value: String?,
+    ): List<FCell> =
+        listOf(
+            FCell(label),
+            FCell(if (value.equals("Oui", ignoreCase = true)) "Oui" else "RAS"),
+            FCell(if (value.equals("Non", ignoreCase = true)) "Non" else "RAS"),
+        )
+
+    private fun thirds(): List<Int> {
+        val third = CONTENT_WIDTH / 3
+        return listOf(third, third, CONTENT_WIDTH - 2 * third)
+    }
+
+    private fun sumGrouped(values: List<String?>): String {
+        val total =
+            values
+                .mapNotNull { it?.filter(Char::isDigit)?.takeIf { digits -> digits.isNotEmpty() }?.toBigInteger() }
+                .fold(BigInteger.ZERO) { acc, value -> acc + value }
+        return grouped(total.toBigDecimal())
+    }
+
+    private fun thinBorders(table: XWPFTable) {
+        val size = 4
+        table.setTopBorder(XWPFTable.XWPFBorderType.SINGLE, size, 0, "auto")
+        table.setBottomBorder(XWPFTable.XWPFBorderType.SINGLE, size, 0, "auto")
+        table.setLeftBorder(XWPFTable.XWPFBorderType.SINGLE, size, 0, "auto")
+        table.setRightBorder(XWPFTable.XWPFBorderType.SINGLE, size, 0, "auto")
+        table.setInsideHBorder(XWPFTable.XWPFBorderType.SINGLE, size, 0, "auto")
+        table.setInsideVBorder(XWPFTable.XWPFBorderType.SINGLE, size, 0, "auto")
+    }
+
+    /** Embeds the organisation logo at a fixed height, preserving its aspect ratio (same technique as the traité export). */
+    private fun renderLogo(
+        paragraph: XWPFParagraph,
+        logo: OrganizationLogo,
+    ) {
+        try {
+            val image = ImageIO.read(ByteArrayInputStream(logo.bytes)) ?: return
+            val width = (FICHE_LOGO_HEIGHT_PX.toDouble() * image.width / image.height).toInt().coerceAtLeast(1)
+            ByteArrayInputStream(logo.bytes).use { stream ->
+                paragraph.createRun().addPicture(
+                    stream,
+                    pictureType(logo.contentType),
+                    "organization-logo",
+                    Units.pixelToEMU(width),
+                    Units.pixelToEMU(FICHE_LOGO_HEIGHT_PX),
+                )
+            }
+        } catch (_: Exception) {
+            // A logo that cannot be decoded/embedded must not break the fiche export.
+        }
+    }
+
+    private fun pictureType(contentType: String): Int =
+        when (contentType.lowercase()) {
+            "image/jpeg", "image/jpg" -> Document.PICTURE_TYPE_JPEG
+            "image/gif" -> Document.PICTURE_TYPE_GIF
+            "image/bmp" -> Document.PICTURE_TYPE_BMP
+            else -> Document.PICTURE_TYPE_PNG
+        }
+
     // ---- Shared rendering helpers -------------------------------------------------------
 
     private fun signatoryName(
@@ -811,5 +1092,8 @@ class CautionDocxExportService(
 
         /** Vertical gap (twips, ~45pt) left between a signatory's title and name so the signature can be handwritten between them. */
         const val SIGNATURE_GAP = 900
+
+        /** Height (px) of the organisation logo banner at the head of the Fiche d'approbation; the width follows the image's aspect ratio. */
+        const val FICHE_LOGO_HEIGHT_PX = 55
     }
 }
