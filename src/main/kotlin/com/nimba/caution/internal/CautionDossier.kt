@@ -38,6 +38,10 @@ class CautionDossier(
     @Column(name = "status", nullable = false)
     var status: DossierStatus = DossierStatus.OPEN
 
+    /** Bumped on every amendment of [contentJson]; the companion documents are re-issued carrying this version. */
+    @Column(name = "version", nullable = false)
+    var version: Int = 1
+
     /** JSON object of the shared market context, keyed by `CautionFieldDefinition.key`. */
     @Column(name = "content_json", nullable = false, columnDefinition = "TEXT")
     var contentJson: String = "{}"

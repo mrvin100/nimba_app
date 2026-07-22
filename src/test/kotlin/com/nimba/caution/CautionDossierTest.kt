@@ -110,6 +110,22 @@ class CautionDossierTest(
     }
 
     @Test
+    fun `amending a dossier bumps its version and closing it is a one-way step`() {
+        val dcm = dcmMemberId()
+        val client = clientId(dcm)
+        val dossier = cautions.createDossier(CreateDossierCommand(client, emptyMap(), dcm))
+        assertEquals(1, dossier.version)
+        assertEquals(DossierStatus.OPEN, dossier.status)
+
+        val amended = cautions.updateDossier(dossier.id, mapOf("beneficiaire" to "MINISTERE DE L'ELEVAGE"))
+        assertEquals(2, amended.version)
+
+        val closed = cautions.closeDossier(dossier.id)
+        assertEquals(DossierStatus.CLOSED, closed.status)
+        assertFailsWith<ResponseStatusException> { cautions.closeDossier(dossier.id) }
+    }
+
+    @Test
     fun `exports the dossier notification with its sections and entered content`() {
         val dcm = dcmMemberId()
         val client =

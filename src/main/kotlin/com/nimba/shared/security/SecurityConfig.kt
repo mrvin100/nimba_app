@@ -175,6 +175,13 @@ class SecurityConfig(
                 // The client registry and the Caution module (SMS, ACF...) back
                 // DCM's tender-guarantee business, distinct from the DRI's dossier
                 // surface entirely — DCM-only, no other direction reads or writes.
+                // The critical, irreversible steps (finalizing a document into an
+                // official record, deleting one, closing a dossier) are reserved to
+                // a DCM manager; the role hierarchy lets a manager pass the member
+                // rules that follow. Matched before the member catch-all.
+                it.requestMatchers(HttpMethod.POST, "$base/cautions/*/finalize").hasRole("DCM_MANAGER")
+                it.requestMatchers(HttpMethod.DELETE, "$base/cautions/*").hasRole("DCM_MANAGER")
+                it.requestMatchers(HttpMethod.POST, "$base/caution-dossiers/*/close").hasRole("DCM_MANAGER")
                 it.requestMatchers("$base/clients/**", "$base/cautions/**", "$base/caution-dossiers/**").hasRole("DCM_MEMBER")
                 // Constituting the dossier (create/update, TA upload, FA edit/publish,
                 // trade generation) belongs to the DRI direction. The role hierarchy

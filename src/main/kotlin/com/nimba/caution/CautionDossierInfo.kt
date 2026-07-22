@@ -14,6 +14,7 @@ data class CautionDossierInfo(
     val clientId: UUID,
     val referenceNumber: String,
     val status: DossierStatus,
+    val version: Int,
     val content: Map<String, String>,
     val createdBy: UUID,
     val createdAt: Instant,

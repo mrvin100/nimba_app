@@ -55,6 +55,12 @@ class CautionDossierController(
         @Valid @RequestBody request: UpdateDossierRequest,
     ): DossierResponse = cautions.updateDossier(id, request.content).toResponse()
 
+    /** Closes a dossier once its request is fully served (a critical, manager-gated step). */
+    @PostMapping("/{id}/close")
+    fun close(
+        @PathVariable id: UUID,
+    ): DossierResponse = cautions.closeDossier(id).toResponse()
+
     @GetMapping("/{id}")
     fun getById(
         @PathVariable id: UUID,

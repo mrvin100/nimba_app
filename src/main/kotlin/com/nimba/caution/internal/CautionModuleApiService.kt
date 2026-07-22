@@ -9,6 +9,7 @@ import com.nimba.caution.CautionModuleApi
 import com.nimba.caution.CautionStatus
 import com.nimba.caution.CreateCautionCommand
 import com.nimba.caution.CreateDossierCommand
+import com.nimba.caution.DossierStatus
 import com.nimba.caution.UpdateCautionCommand
 import com.nimba.client.ClientModuleApi
 import com.nimba.client.getOrThrow
@@ -78,12 +79,27 @@ class CautionModuleApiService(
         id: UUID,
         content: Map<String, String>,
     ): CautionDossierInfo {
-        val dossier =
-            dossiers.findById(id).orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Dossier introuvable") }
+        val dossier = requireDossier(id)
         dossier.contentJson = objectMapper.writeValueAsString(content)
+        // An amendment re-issues the companions: bump the version they carry.
+        dossier.version += 1
         dossier.updatedAt = Instant.now()
         return dossier.toInfo(objectMapper)
     }
+
+    @Transactional
+    override fun closeDossier(id: UUID): CautionDossierInfo {
+        val dossier = requireDossier(id)
+        if (dossier.status == DossierStatus.CLOSED) {
+            throw ResponseStatusException(HttpStatus.CONFLICT, "Le dossier est déjà clôturé")
+        }
+        dossier.status = DossierStatus.CLOSED
+        dossier.updatedAt = Instant.now()
+        return dossier.toInfo(objectMapper)
+    }
+
+    private fun requireDossier(id: UUID): CautionDossier =
+        dossiers.findById(id).orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Dossier introuvable") }
 
     @Transactional(readOnly = true)
     override fun findDossier(id: UUID): CautionDossierInfo? = dossiers.findById(id).orElse(null)?.toInfo(objectMapper)
@@ -225,6 +241,7 @@ class CautionModuleApiService(
             clientId = clientId,
             referenceNumber = referenceNumber,
             status = status,
+            version = version,
             content = objectMapper.readValue<Map<String, String>>(contentJson),
             createdBy = createdBy,
             createdAt = createdAt,

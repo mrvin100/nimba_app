@@ -86,6 +86,7 @@ class CautionDocxExportService(
             CautionDocumentType.SMS -> renderSms(document, caution, snapshot.raisonSociale.orRas(), snapshot.agence)
             CautionDocumentType.ACF -> renderAcf(document, caution, snapshot)
             CautionDocumentType.AFC -> renderAfc(document, caution, snapshot)
+            CautionDocumentType.PRO -> renderProrogation(document, caution)
         }
 
         val bytes =
@@ -134,7 +135,7 @@ class CautionDocxExportService(
                 document.close()
                 out.toByteArray()
             }
-        return CautionExport("notification-${dossier.referenceNumber}.docx", bytes)
+        return CautionExport("notification-${dossier.referenceNumber}-v${dossier.version}.docx", bytes)
     }
 
     /**
@@ -161,7 +162,7 @@ class CautionDocxExportService(
                 document.close()
                 out.toByteArray()
             }
-        return CautionExport("fiche-approbation-${dossier.referenceNumber}.docx", bytes)
+        return CautionExport("fiche-approbation-${dossier.referenceNumber}-v${dossier.version}.docx", bytes)
     }
 
     // ---- Caution de Soumission (SMS) ---------------------------------------------------
@@ -442,6 +443,73 @@ class CautionDocxExportService(
                 "organe habilité à statuer en matière de crédit dans notre institution.",
         )
         paragraph(document, "En foi de quoi, la présente certification est établie pour servir et faire valoir ce que de droit.")
+        val faitLe = document.createParagraph()
+        faitLe.alignment = ParagraphAlignment.RIGHT
+        addRun(faitLe, "Fait à Conakry, le ${fmtLong(c["dateEmission"])}", bold = true)
+        spacer(document)
+        renderSignatureBlock(document, c)
+    }
+
+    // ---- Avenant de Prorogation (PRO) --------------------------------------------------
+
+    /**
+     * Renders an Avenant de Prorogation: a short deed that extends a finalized
+     * caution's validity. It references the original caution (which stays
+     * immutable) by its number and issue date, restates the guarantee, and sets
+     * the new expiry date. There is no reference model for this document, so the
+     * layout follows the same typography and header style as the caution.
+     */
+    private fun renderProrogation(
+        document: XWPFDocument,
+        caution: CautionInfo,
+    ) {
+        val c = caution.content
+        headerBox(document, "AVENANT DE PROROGATION", caution.referenceNumber)
+        spacer(document)
+
+        mixedParagraph(
+            document,
+            plain("Nous, "),
+            bold("Afriland First Bank Guinée S.A."),
+            plain(", Société Anonyme au Capital de "),
+            bold("GNF 200 000 000 000"),
+            plain(
+                ", dont le Siège Social est à Almamya - Commune de Kaloum, B.P. : 343, Conakry - République de Guinée, " +
+                    "représentée par ",
+            ),
+            bold(signatoryLabel(c, 1)),
+            plain(" et "),
+            bold(signatoryLabel(c, 2)),
+            plain(","),
+        )
+        mixedParagraph(
+            document,
+            plain("Faisant suite à la caution de soumission N° "),
+            bold(c["cautionOrigineReference"].orRas()),
+            plain(" émise le "),
+            bold(fmtLong(c["cautionOrigineDate"])),
+            plain(" en faveur de "),
+            bold(c["beneficiaire"].orRas()),
+            plain(", dans le cadre de l'appel d'offres "),
+            bold(c["referenceAppelOffres"].orRas()),
+            plain(" relatif aux "),
+            bold(c["objetMarche"].orRas()),
+            plain(", portant sur un montant de "),
+            bold(amountClause(c)),
+            plain(","),
+        )
+        mixedParagraph(
+            document,
+            plain("Prorogeons par la présente la validité de ladite caution jusqu'au "),
+            bold("${fmtLong(c["nouvelleDateExpiration"])}."),
+            plain(" Toutes les autres clauses et conditions de la caution d'origine demeurent inchangées."),
+        )
+        paragraph(
+            document,
+            "La présente garantie est régie par les règles uniformes de la chambre de commerce Internationale (CCI) " +
+                "relatives aux garanties sur demande, Publication CCI N°758.",
+        )
+        spacer(document)
         val faitLe = document.createParagraph()
         faitLe.alignment = ParagraphAlignment.RIGHT
         addRun(faitLe, "Fait à Conakry, le ${fmtLong(c["dateEmission"])}", bold = true)
