@@ -176,13 +176,13 @@ class CautionDossierTest(
         val client = clientId(dcm)
         // The dossier carries the common context (bénéficiaire, montant, signataires…).
         val dossier = cautions.createDossier(CreateDossierCommand(client, smsContent, dcm))
-        // The document provides only its SPECIFIC fields; the common ones are inherited.
+        // The document provides only its SPECIFIC fields (amount, currency, dates); the common ones are inherited.
         val document =
             cautions.create(
                 CreateCautionCommand(
                     client,
                     CautionDocumentType.SMS,
-                    mapOf("dateOffre" to "2026-02-13", "dateExpiration" to "2026-05-13"),
+                    mapOf("devise" to "GNF", "montant" to "306000000", "dateOffre" to "2026-02-13", "dateExpiration" to "2026-05-13"),
                     dcm,
                     dossierId = dossier.id,
                 ),
@@ -192,7 +192,7 @@ class CautionDossierTest(
         val text = docText(export.export(document.id).content)
 
         assertContains(text, "MINISTERE DE L'ELEVAGE") // bénéficiaire inherited from the dossier
-        assertContains(text, "306 000 000") // montant inherited from the dossier
+        assertContains(text, "306 000 000") // montant, the document's own specific field
         assertContains(text, "13 Mai 2026") // dateExpiration, the document's own specific field
     }
 
@@ -206,7 +206,7 @@ class CautionDossierTest(
                 CreateCautionCommand(
                     client,
                     CautionDocumentType.SMS,
-                    mapOf("dateOffre" to "2026-02-13", "dateExpiration" to "2026-05-13"),
+                    mapOf("devise" to "GNF", "montant" to "306000000", "dateOffre" to "2026-02-13", "dateExpiration" to "2026-05-13"),
                     dcm,
                     dossierId = dossier.id,
                 ),
@@ -214,7 +214,10 @@ class CautionDossierTest(
 
         cautions.update(
             document.id,
-            UpdateCautionCommand(mapOf("dateOffre" to "2026-02-14", "dateExpiration" to "2026-05-20"), reason = "Correction de la date"),
+            UpdateCautionCommand(
+                mapOf("devise" to "GNF", "montant" to "306000000", "dateOffre" to "2026-02-14", "dateExpiration" to "2026-05-20"),
+                reason = "Correction de la date",
+            ),
             dcm,
         )
 

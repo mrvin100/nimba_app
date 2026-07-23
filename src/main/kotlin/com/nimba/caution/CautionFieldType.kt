@@ -56,14 +56,18 @@ data class CautionFieldDefinition(
  * from a single bank-wide setting.
  */
 object CautionFieldRegistry {
-    /** The common fields — entered once on the dossier, inherited by every document. All carry [CautionFieldScope.COMMON]. */
+    /**
+     * The common fields — the market context and the signatories — entered once
+     * on the dossier and inherited by every document. All carry
+     * [CautionFieldScope.COMMON]. The amount and currency are NOT here: they are
+     * proper to each document (a multi-lot request has a different amount per
+     * lot), see [PER_DOCUMENT_FIELDS].
+     */
     val SHARED_FIELDS =
         listOf(
             CautionFieldDefinition("beneficiaire", "Bénéficiaire (Maître d'ouvrage)", CautionFieldType.TEXT),
             CautionFieldDefinition("referenceAppelOffres", "Référence de l'appel d'offres", CautionFieldType.TEXT),
             CautionFieldDefinition("objetMarche", "Objet du marché", CautionFieldType.TEXT),
-            CautionFieldDefinition("devise", "Devise", CautionFieldType.CURRENCY),
-            CautionFieldDefinition("montant", "Montant", CautionFieldType.AMOUNT),
             CautionFieldDefinition("dateEmission", "Date d'émission", CautionFieldType.DATE),
             CautionFieldDefinition("signataire1Civilite", "Signataire 1 — Civilité", CautionFieldType.CIVILITY, optional = true),
             CautionFieldDefinition("signataire1Nom", "Signataire 1 — Nom complet", CautionFieldType.TEXT),
@@ -72,6 +76,13 @@ object CautionFieldRegistry {
             CautionFieldDefinition("signataire2Nom", "Signataire 2 — Nom complet", CautionFieldType.TEXT),
             CautionFieldDefinition("signataire2Titre", "Signataire 2 — Titre", CautionFieldType.TEXT),
         ).map { it.copy(scope = CautionFieldScope.COMMON) }
+
+    /** Per-document fields common to every type but proper to each document (the amount and its currency differ from one lot to the next). */
+    private val PER_DOCUMENT_FIELDS =
+        listOf(
+            CautionFieldDefinition("devise", "Devise", CautionFieldType.CURRENCY),
+            CautionFieldDefinition("montant", "Montant", CautionFieldType.AMOUNT),
+        ).map { it.copy(scope = CautionFieldScope.SPECIFIC) }
 
     private val SPECIFIC_FIELDS: Map<CautionDocumentType, List<CautionFieldDefinition>> =
         mapOf(
@@ -90,7 +101,8 @@ object CautionFieldRegistry {
                 ),
         )
 
-    fun specificFieldsFor(type: CautionDocumentType): List<CautionFieldDefinition> = SPECIFIC_FIELDS.getValue(type)
+    /** A type's specific fields: the per-document amount/currency, then the type's own fields. */
+    fun specificFieldsFor(type: CautionDocumentType): List<CautionFieldDefinition> = PER_DOCUMENT_FIELDS + SPECIFIC_FIELDS.getValue(type)
 
     fun allFieldsFor(type: CautionDocumentType): List<CautionFieldDefinition> = SHARED_FIELDS + specificFieldsFor(type)
 
