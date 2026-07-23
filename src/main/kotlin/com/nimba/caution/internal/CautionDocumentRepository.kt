@@ -9,10 +9,10 @@ import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import java.util.UUID
 
-interface CautionRepository : JpaRepository<Caution, UUID> {
+interface CautionDocumentRepository : JpaRepository<CautionDocument, UUID> {
     @Query(
         """
-        select c from Caution c
+        select c from CautionDocument c
         where (:clientId is null or c.clientId = :clientId)
           and (:documentType is null or c.documentType = :documentType)
           and (:status is null or c.status = :status)
@@ -23,9 +23,9 @@ interface CautionRepository : JpaRepository<Caution, UUID> {
         @Param("documentType") documentType: CautionDocumentType?,
         @Param("status") status: CautionStatus?,
         pageable: Pageable,
-    ): Page<Caution>
+    ): Page<CautionDocument>
 
-    fun findByDossierIdOrderByCreatedAtDesc(dossierId: UUID): List<Caution>
+    fun findByDossierIdOrderByCreatedAtDesc(dossierId: UUID): List<CautionDocument>
 
     fun deleteByDossierId(dossierId: UUID)
 }

@@ -31,7 +31,7 @@ import java.util.UUID
 
 @Service
 class CautionModuleApiService(
-    private val cautions: CautionRepository,
+    private val cautions: CautionDocumentRepository,
     private val dossiers: CautionDossierRepository,
     private val dossierEvents: CautionDossierEventRepository,
     private val documentVersions: CautionDocumentVersionRepository,
@@ -51,7 +51,7 @@ class CautionModuleApiService(
 
         val caution =
             cautions.save(
-                Caution(
+                CautionDocument(
                     clientId = client.id,
                     documentType = command.documentType,
                     referenceNumber =
@@ -189,7 +189,7 @@ class CautionModuleApiService(
     }
 
     /** Freezes a document: captures the issuing client's identity and marks it FINAL. Shared by document- and dossier-level finalization. */
-    private fun freeze(caution: Caution) {
+    private fun freeze(caution: CautionDocument) {
         val client = clients.getOrThrow(caution.clientId)
         caution.clientSnapshot =
             CautionClientSnapshot(
@@ -317,7 +317,7 @@ class CautionModuleApiService(
      * dossier's lock (writable while BROUILLON or EN_PROROGATION); a legacy
      * standalone document falls back to its own DRAFT status.
      */
-    private fun requireEditable(id: UUID): Caution {
+    private fun requireEditable(id: UUID): CautionDocument {
         val caution = cautions.findById(id).orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Caution introuvable") }
         val dossierId = caution.dossierId
         if (dossierId != null) {
@@ -331,7 +331,7 @@ class CautionModuleApiService(
         return caution
     }
 
-    private fun requireDraft(id: UUID): Caution {
+    private fun requireDraft(id: UUID): CautionDocument {
         val caution = cautions.findById(id).orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Caution introuvable") }
         if (caution.status != CautionStatus.DRAFT) {
             throw ResponseStatusException(HttpStatus.CONFLICT, "La caution est déjà finalisée")
@@ -364,7 +364,7 @@ class CautionModuleApiService(
         }
     }
 
-    private fun Caution.toInfo(objectMapper: ObjectMapper): CautionInfo =
+    private fun CautionDocument.toInfo(objectMapper: ObjectMapper): CautionInfo =
         CautionInfo(
             id = requireNotNull(id),
             clientId = clientId,

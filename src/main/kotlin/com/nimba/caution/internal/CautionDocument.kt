@@ -16,16 +16,17 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * One generated banking document (Caution de Soumission, Attestation de
- * Capacité Financière, later Avance sur Démarrage...). [clientId] references
- * the client module's aggregate by id only — no JPA relationship crosses the
- * module boundary. [referenceNumber] is assigned once at creation (design
- * §numbering: a single global sequence, format
- * `{sequence}-{matricule}-{documentType.code}-{date}`) and never changes.
+ * One document generated within a dossier (Caution de Soumission, Attestation
+ * de Capacité Financière, Attestation de Facilité de Crédit, Avenant de
+ * Prorogation…). [clientId] references the client module's aggregate by id only
+ * — no JPA relationship crosses the module boundary. [referenceNumber] is
+ * assigned once at creation (a single global sequence, format
+ * `{sequence}-{matricule}-{documentType.code}-{date}`) and never changes. The
+ * table keeps its historical name (`caution`).
  */
 @Entity
 @Table(name = "caution")
-class Caution(
+class CautionDocument(
     @Column(name = "client_id", nullable = false, updatable = false)
     val clientId: UUID,
     @Enumerated(EnumType.STRING)
