@@ -11,6 +11,7 @@ import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
+import jakarta.persistence.Version
 import java.time.Instant
 import java.util.UUID
 
@@ -39,7 +40,12 @@ class Caution(
     @GeneratedValue(strategy = GenerationType.UUID)
     var id: UUID? = null
 
-    /** The dossier this document belongs to, or null when created standalone (every pre-dossier document stays valid). */
+    /** Optimistic-lock counter (JPA-managed): a concurrent edit of the same document fails with a 409 rather than silently overwriting. */
+    @Version
+    @Column(name = "lock_version", nullable = false)
+    var lockVersion: Long = 0
+
+    /** The dossier this document belongs to, or null for a legacy document created before dossiers (attached by the V32 migration). */
     @Column(name = "dossier_id")
     var dossierId: UUID? = null
 

@@ -2,6 +2,7 @@ package com.nimba.caution.internal
 
 import com.nimba.caution.CautionClientSnapshotInfo
 import com.nimba.caution.CautionDocumentType
+import com.nimba.caution.CautionDossierDeleted
 import com.nimba.caution.CautionDossierInfo
 import com.nimba.caution.CautionFieldRegistry
 import com.nimba.caution.CautionInfo
@@ -13,6 +14,7 @@ import com.nimba.caution.DossierStatus
 import com.nimba.caution.UpdateCautionCommand
 import com.nimba.client.ClientModuleApi
 import com.nimba.client.getOrThrow
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.http.HttpStatus
@@ -31,6 +33,7 @@ class CautionModuleApiService(
     private val clients: ClientModuleApi,
     private val numberGenerator: CautionNumberGenerator,
     private val objectMapper: ObjectMapper,
+    private val events: ApplicationEventPublisher,
 ) : CautionModuleApi {
     @Transactional
     override fun create(command: CreateCautionCommand): CautionInfo {
@@ -96,6 +99,14 @@ class CautionModuleApiService(
         dossier.status = DossierStatus.CLOSED
         dossier.updatedAt = Instant.now()
         return dossier.toInfo(objectMapper)
+    }
+
+    @Transactional
+    override fun deleteDossier(id: UUID) {
+        val dossier = requireDossier(id)
+        cautions.deleteByDossierId(requireNotNull(dossier.id))
+        dossiers.delete(dossier)
+        events.publishEvent(CautionDossierDeleted(requireNotNull(dossier.id)))
     }
 
     private fun requireDossier(id: UUID): CautionDossier =

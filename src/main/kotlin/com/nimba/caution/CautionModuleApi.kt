@@ -57,6 +57,9 @@ interface CautionModuleApi {
     /** Closes a dossier once its request is fully served. 404 if unknown; 409 if already closed. */
     fun closeDossier(id: UUID): CautionDossierInfo
 
+    /** Deletes a dossier and every document attached to it. 404 if unknown. Publishes [CautionDossierDeleted]. */
+    fun deleteDossier(id: UUID)
+
     fun findDossier(id: UUID): CautionDossierInfo?
 
     /** Pages through dossiers, newest first; the client filter is optional. */

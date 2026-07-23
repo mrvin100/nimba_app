@@ -26,4 +26,6 @@ interface CautionRepository : JpaRepository<Caution, UUID> {
     ): Page<Caution>
 
     fun findByDossierIdOrderByCreatedAtDesc(dossierId: UUID): List<Caution>
+
+    fun deleteByDossierId(dossierId: UUID)
 }

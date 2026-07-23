@@ -21,6 +21,7 @@ import java.util.UUID
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @Import(TestcontainersConfiguration::class)
@@ -107,6 +108,22 @@ class CautionDossierTest(
 
         val forClient = cautions.listDossiers(PageRequest.of(0, 20), clientId = client)
         assertEquals(1, forClient.totalElements)
+    }
+
+    @Test
+    fun `deleting a dossier removes it and cascades to its documents`() {
+        val dcm = dcmMemberId()
+        val client = clientId(dcm)
+        val dossier = cautions.createDossier(CreateDossierCommand(client, emptyMap(), dcm))
+        cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm, dossierId = dossier.id))
+        cautions.create(CreateCautionCommand(client, CautionDocumentType.AFC, smsContent, dcm, dossierId = dossier.id))
+        assertEquals(2, cautions.dossierDocuments(dossier.id).size)
+
+        cautions.deleteDossier(dossier.id)
+
+        assertNull(cautions.findDossier(dossier.id))
+        assertTrue(cautions.dossierDocuments(dossier.id).isEmpty())
+        assertFailsWith<ResponseStatusException> { cautions.deleteDossier(dossier.id) }
     }
 
     @Test

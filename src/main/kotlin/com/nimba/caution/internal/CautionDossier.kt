@@ -9,6 +9,7 @@ import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
+import jakarta.persistence.Version
 import java.time.Instant
 import java.util.UUID
 
@@ -33,6 +34,11 @@ class CautionDossier(
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     var id: UUID? = null
+
+    /** Optimistic-lock counter (JPA-managed): a concurrent edit of the same dossier fails with a 409 rather than silently overwriting. Distinct from the business [version]. */
+    @Version
+    @Column(name = "lock_version", nullable = false)
+    var lockVersion: Long = 0
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
