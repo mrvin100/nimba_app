@@ -181,7 +181,7 @@ class SecurityConfig(
                 // rules that follow. Matched before the member catch-all.
                 it.requestMatchers(HttpMethod.POST, "$base/cautions/*/finalize").hasRole("DCM_MANAGER")
                 it.requestMatchers(HttpMethod.DELETE, "$base/cautions/*").hasRole("DCM_MANAGER")
-                it.requestMatchers(HttpMethod.POST, "$base/caution-dossiers/*/close").hasRole("DCM_MANAGER")
+                it.requestMatchers(HttpMethod.POST, "$base/caution-dossiers/*/proroge").hasRole("DCM_MANAGER")
                 it.requestMatchers(HttpMethod.DELETE, "$base/caution-dossiers/*").hasRole("DCM_MANAGER")
                 it.requestMatchers("$base/clients/**", "$base/cautions/**", "$base/caution-dossiers/**").hasRole("DCM_MEMBER")
                 // Constituting the dossier (create/update, TA upload, FA edit/publish,

@@ -1,12 +1,23 @@
 package com.nimba.caution
 
 /**
- * A caution dossier's lifecycle. It stays OPEN while documents are still being
- * added or amended (late additions, prorogations), and is CLOSED once the DCM
- * considers the request fully served. Individual documents keep their own
- * DRAFT/FINAL status independently ([CautionStatus]).
+ * A caution dossier's lifecycle. The dossier is the aggregate root, so the lock
+ * is at this level (not per document):
+ *
+ *  BROUILLON ──finalize──► FINALISE ──proroge (Manager)──► EN_PROROGATION
+ *      ▲                        ▲                                │
+ *      └──── (édition libre)    └────────── refinalize ──────────┘
+ *
+ * - [BROUILLON] : the request is being constituted; documents and common
+ *   information are freely added, edited and deleted.
+ * - [FINALISE] : the request is finalized — everything is frozen (a write gate
+ *   refuses any change) and each document's client snapshot is captured.
+ * - [EN_PROROGATION] : a Manager reopened the finalized dossier to correct a
+ *   single document (deadline extension…); edits are allowed again until it is
+ *   re-finalized, and the reason + responsible are journaled.
  */
 enum class DossierStatus {
-    OPEN,
-    CLOSED,
+    BROUILLON,
+    FINALISE,
+    EN_PROROGATION,
 }

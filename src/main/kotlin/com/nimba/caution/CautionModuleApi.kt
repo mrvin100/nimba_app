@@ -54,8 +54,33 @@ interface CautionModuleApi {
         content: Map<String, String>,
     ): CautionDossierInfo
 
-    /** Closes a dossier once its request is fully served. 404 if unknown; 409 if already closed. */
-    fun closeDossier(id: UUID): CautionDossierInfo
+    /**
+     * Finalizes the client's request: freezes every document's client snapshot,
+     * locks the dossier (BROUILLON → FINALISE). 409 if not in BROUILLON.
+     */
+    fun finalizeDossier(
+        id: UUID,
+        actor: UUID,
+    ): CautionDossierInfo
+
+    /**
+     * Reopens a finalized dossier to correct a single document (Manager only):
+     * FINALISE → EN_PROROGATION, journaling [reason] and [actor]. 409 if not FINALISE.
+     */
+    fun prorogeDossier(
+        id: UUID,
+        actor: UUID,
+        reason: String,
+    ): CautionDossierInfo
+
+    /** Re-locks a prorogated dossier once the correction is done: EN_PROROGATION → FINALISE, version++. 409 if not EN_PROROGATION. */
+    fun refinalizeDossier(
+        id: UUID,
+        actor: UUID,
+    ): CautionDossierInfo
+
+    /** A dossier's lifecycle journal, newest first. */
+    fun dossierEvents(id: UUID): List<CautionDossierEventInfo>
 
     /** Deletes a dossier and every document attached to it. 404 if unknown. Publishes [CautionDossierDeleted]. */
     fun deleteDossier(id: UUID)

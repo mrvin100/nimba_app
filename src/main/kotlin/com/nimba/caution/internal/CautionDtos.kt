@@ -2,6 +2,7 @@ package com.nimba.caution.internal
 
 import com.nimba.caution.CautionClientSnapshotInfo
 import com.nimba.caution.CautionDocumentType
+import com.nimba.caution.CautionDossierEventInfo
 import com.nimba.caution.CautionDossierInfo
 import com.nimba.caution.CautionFieldDefinition
 import com.nimba.caution.CautionFieldRegistry
@@ -10,8 +11,10 @@ import com.nimba.caution.CautionInfo
 import com.nimba.caution.CautionStatus
 import com.nimba.caution.CreateCautionCommand
 import com.nimba.caution.CreateDossierCommand
+import com.nimba.caution.DossierAction
 import com.nimba.caution.DossierStatus
 import com.nimba.caution.UpdateCautionCommand
+import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Positive
 import java.time.Instant
@@ -142,6 +145,32 @@ internal fun CreateDossierRequest.toCommand(createdBy: UUID): CreateDossierComma
 data class UpdateDossierRequest(
     val content: Map<String, String> = emptyMap(),
 )
+
+data class ProrogeDossierRequest(
+    @field:NotBlank
+    val reason: String = "",
+)
+
+data class DossierEventResponse(
+    val id: UUID,
+    val action: DossierAction,
+    val fromStatus: DossierStatus,
+    val toStatus: DossierStatus,
+    val reason: String?,
+    val actor: UUID,
+    val createdAt: Instant,
+)
+
+internal fun CautionDossierEventInfo.toResponse(): DossierEventResponse =
+    DossierEventResponse(
+        id = id,
+        action = action,
+        fromStatus = fromStatus,
+        toStatus = toStatus,
+        reason = reason,
+        actor = actor,
+        createdAt = createdAt,
+    )
 
 data class DossierResponse(
     val id: UUID,

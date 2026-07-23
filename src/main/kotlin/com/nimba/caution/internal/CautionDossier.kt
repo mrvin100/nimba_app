@@ -42,7 +42,7 @@ class CautionDossier(
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
-    var status: DossierStatus = DossierStatus.OPEN
+    var status: DossierStatus = DossierStatus.BROUILLON
 
     /** Bumped on every amendment of [contentJson]; the companion documents are re-issued carrying this version. */
     @Column(name = "version", nullable = false)

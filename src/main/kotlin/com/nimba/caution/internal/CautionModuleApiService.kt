@@ -3,6 +3,7 @@ package com.nimba.caution.internal
 import com.nimba.caution.CautionClientSnapshotInfo
 import com.nimba.caution.CautionDocumentType
 import com.nimba.caution.CautionDossierDeleted
+import com.nimba.caution.CautionDossierEventInfo
 import com.nimba.caution.CautionDossierInfo
 import com.nimba.caution.CautionFieldRegistry
 import com.nimba.caution.CautionInfo
@@ -10,6 +11,7 @@ import com.nimba.caution.CautionModuleApi
 import com.nimba.caution.CautionStatus
 import com.nimba.caution.CreateCautionCommand
 import com.nimba.caution.CreateDossierCommand
+import com.nimba.caution.DossierAction
 import com.nimba.caution.DossierStatus
 import com.nimba.caution.UpdateCautionCommand
 import com.nimba.client.ClientModuleApi
@@ -30,6 +32,7 @@ import java.util.UUID
 class CautionModuleApiService(
     private val cautions: CautionRepository,
     private val dossiers: CautionDossierRepository,
+    private val dossierEvents: CautionDossierEventRepository,
     private val clients: ClientModuleApi,
     private val numberGenerator: CautionNumberGenerator,
     private val objectMapper: ObjectMapper,
@@ -39,7 +42,10 @@ class CautionModuleApiService(
     override fun create(command: CreateCautionCommand): CautionInfo {
         val client = clients.getOrThrow(command.clientId)
         requireRequiredFields(command.documentType, command.content)
-        command.dossierId?.let { requireDossierForClient(it, client.id) }
+        command.dossierId?.let {
+            requireDossierForClient(it, client.id)
+            assertWritable(requireDossier(it))
+        }
 
         val caution =
             cautions.save(
@@ -83,6 +89,7 @@ class CautionModuleApiService(
         content: Map<String, String>,
     ): CautionDossierInfo {
         val dossier = requireDossier(id)
+        assertWritable(dossier)
         dossier.contentJson = objectMapper.writeValueAsString(content)
         // An amendment re-issues the companions: bump the version they carry.
         dossier.version += 1
@@ -91,23 +98,120 @@ class CautionModuleApiService(
     }
 
     @Transactional
-    override fun closeDossier(id: UUID): CautionDossierInfo {
+    override fun finalizeDossier(
+        id: UUID,
+        actor: UUID,
+    ): CautionDossierInfo {
         val dossier = requireDossier(id)
-        if (dossier.status == DossierStatus.CLOSED) {
-            throw ResponseStatusException(HttpStatus.CONFLICT, "Le dossier est déjà clôturé")
+        if (dossier.status != DossierStatus.BROUILLON) {
+            throw ResponseStatusException(HttpStatus.CONFLICT, "Seul un dossier en brouillon peut être finalisé")
         }
-        dossier.status = DossierStatus.CLOSED
-        dossier.updatedAt = Instant.now()
-        return dossier.toInfo(objectMapper)
+        cautions
+            .findByDossierIdOrderByCreatedAtDesc(id)
+            .filter { it.status == CautionStatus.DRAFT }
+            .forEach { freeze(it) }
+        return transition(dossier, DossierAction.FINALIZE, DossierStatus.FINALISE, actor, null)
     }
+
+    @Transactional
+    override fun prorogeDossier(
+        id: UUID,
+        actor: UUID,
+        reason: String,
+    ): CautionDossierInfo {
+        require(reason.isNotBlank()) { "reason must not be blank" }
+        val dossier = requireDossier(id)
+        if (dossier.status != DossierStatus.FINALISE) {
+            throw ResponseStatusException(HttpStatus.CONFLICT, "Seul un dossier finalisé peut être prorogé")
+        }
+        return transition(dossier, DossierAction.PROROGE, DossierStatus.EN_PROROGATION, actor, reason)
+    }
+
+    @Transactional
+    override fun refinalizeDossier(
+        id: UUID,
+        actor: UUID,
+    ): CautionDossierInfo {
+        val dossier = requireDossier(id)
+        if (dossier.status != DossierStatus.EN_PROROGATION) {
+            throw ResponseStatusException(HttpStatus.CONFLICT, "Seul un dossier en prorogation peut être re-finalisé")
+        }
+        dossier.version += 1
+        return transition(dossier, DossierAction.REFINALIZE, DossierStatus.FINALISE, actor, null)
+    }
+
+    @Transactional(readOnly = true)
+    override fun dossierEvents(id: UUID): List<CautionDossierEventInfo> =
+        dossierEvents.findByDossierIdOrderByCreatedAtDesc(id).map { it.toInfo() }
 
     @Transactional
     override fun deleteDossier(id: UUID) {
         val dossier = requireDossier(id)
         cautions.deleteByDossierId(requireNotNull(dossier.id))
+        dossierEvents.deleteByDossierId(requireNotNull(dossier.id))
         dossiers.delete(dossier)
         events.publishEvent(CautionDossierDeleted(requireNotNull(dossier.id)))
     }
+
+    /** Applies a lifecycle transition and appends it to the dossier's journal. */
+    private fun transition(
+        dossier: CautionDossier,
+        action: DossierAction,
+        to: DossierStatus,
+        actor: UUID,
+        reason: String?,
+    ): CautionDossierInfo {
+        val from = dossier.status
+        dossier.status = to
+        dossier.updatedAt = Instant.now()
+        dossierEvents.save(
+            CautionDossierEvent(
+                dossierId = requireNotNull(dossier.id),
+                action = action,
+                fromStatus = from,
+                toStatus = to,
+                reason = reason,
+                actor = actor,
+            ),
+        )
+        return dossier.toInfo(objectMapper)
+    }
+
+    /** A dossier accepts writes (add/edit/delete of documents and common info) only while BROUILLON or EN_PROROGATION. */
+    private fun assertWritable(dossier: CautionDossier) {
+        if (dossier.status == DossierStatus.FINALISE) {
+            throw ResponseStatusException(HttpStatus.CONFLICT, "Le dossier est finalisé : déverrouillez-le (prorogation) pour le modifier")
+        }
+    }
+
+    /** Freezes a document: captures the issuing client's identity and marks it FINAL. Shared by document- and dossier-level finalization. */
+    private fun freeze(caution: Caution) {
+        val client = clients.getOrThrow(caution.clientId)
+        caution.clientSnapshot =
+            CautionClientSnapshot(
+                matricule = client.matricule,
+                raisonSociale = client.raisonSociale,
+                sigle = client.sigle,
+                adressePhysique = client.adressePhysique,
+                rccm = client.rccm,
+                accountNumber = client.accountNumber,
+                agence = client.agence,
+            )
+        caution.status = CautionStatus.FINAL
+        caution.finalizedAt = Instant.now()
+        caution.updatedAt = caution.finalizedAt!!
+    }
+
+    private fun CautionDossierEvent.toInfo(): CautionDossierEventInfo =
+        CautionDossierEventInfo(
+            id = requireNotNull(id),
+            action = action,
+            fromStatus = fromStatus,
+            toStatus = toStatus,
+            reason = reason,
+            actor = actor,
+            createdAt = createdAt,
+        )
 
     private fun requireDossier(id: UUID): CautionDossier =
         dossiers.findById(id).orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Dossier introuvable") }
@@ -143,7 +247,7 @@ class CautionModuleApiService(
         id: UUID,
         command: UpdateCautionCommand,
     ): CautionInfo {
-        val caution = requireDraft(id)
+        val caution = requireEditable(id)
         requireRequiredFields(caution.documentType, command.content)
         caution.contentJson = objectMapper.writeValueAsString(command.content)
         caution.updatedAt = Instant.now()
@@ -153,20 +257,7 @@ class CautionModuleApiService(
     @Transactional
     override fun finalize(id: UUID): CautionInfo {
         val caution = requireDraft(id)
-        val client = clients.getOrThrow(caution.clientId)
-        caution.clientSnapshot =
-            CautionClientSnapshot(
-                matricule = client.matricule,
-                raisonSociale = client.raisonSociale,
-                sigle = client.sigle,
-                adressePhysique = client.adressePhysique,
-                rccm = client.rccm,
-                accountNumber = client.accountNumber,
-                agence = client.agence,
-            )
-        caution.status = CautionStatus.FINAL
-        caution.finalizedAt = Instant.now()
-        caution.updatedAt = caution.finalizedAt!!
+        freeze(caution)
         return caution.toInfo(objectMapper)
     }
 
@@ -186,14 +277,26 @@ class CautionModuleApiService(
 
     @Transactional
     override fun delete(id: UUID) {
+        cautions.delete(requireEditable(id))
+    }
+
+    /**
+     * Resolves an editable document. Within a dossier, editability follows the
+     * dossier's lock (writable while BROUILLON or EN_PROROGATION); a legacy
+     * standalone document falls back to its own DRAFT status.
+     */
+    private fun requireEditable(id: UUID): Caution {
         val caution = cautions.findById(id).orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Caution introuvable") }
-        if (caution.status != CautionStatus.DRAFT) {
+        val dossierId = caution.dossierId
+        if (dossierId != null) {
+            assertWritable(requireDossier(dossierId))
+        } else if (caution.status != CautionStatus.DRAFT) {
             throw ResponseStatusException(
                 HttpStatus.CONFLICT,
-                "Seul un brouillon peut être supprimé — un document finalisé est une pièce officielle",
+                "Seul un brouillon peut être modifié — un document finalisé est une pièce officielle",
             )
         }
-        cautions.delete(caution)
+        return caution
     }
 
     private fun requireDraft(id: UUID): Caution {
