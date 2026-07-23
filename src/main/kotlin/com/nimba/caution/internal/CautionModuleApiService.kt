@@ -2,6 +2,7 @@ package com.nimba.caution.internal
 
 import com.nimba.caution.CautionClientSnapshotInfo
 import com.nimba.caution.CautionDocumentType
+import com.nimba.caution.CautionDocumentVersionInfo
 import com.nimba.caution.CautionDossierDeleted
 import com.nimba.caution.CautionDossierEventInfo
 import com.nimba.caution.CautionDossierInfo
@@ -33,6 +34,7 @@ class CautionModuleApiService(
     private val cautions: CautionRepository,
     private val dossiers: CautionDossierRepository,
     private val dossierEvents: CautionDossierEventRepository,
+    private val documentVersions: CautionDocumentVersionRepository,
     private val clients: ClientModuleApi,
     private val numberGenerator: CautionNumberGenerator,
     private val objectMapper: ObjectMapper,
@@ -41,7 +43,7 @@ class CautionModuleApiService(
     @Transactional
     override fun create(command: CreateCautionCommand): CautionInfo {
         val client = clients.getOrThrow(command.clientId)
-        requireRequiredFields(command.documentType, command.content)
+        requireRequiredFields(command.documentType, command.content, inDossier = command.dossierId != null)
         command.dossierId?.let {
             requireDossierForClient(it, client.id)
             assertWritable(requireDossier(it))
@@ -147,6 +149,8 @@ class CautionModuleApiService(
     @Transactional
     override fun deleteDossier(id: UUID) {
         val dossier = requireDossier(id)
+        val documentIds = cautions.findByDossierIdOrderByCreatedAtDesc(id).mapNotNull { it.id }
+        if (documentIds.isNotEmpty()) documentVersions.deleteByDocumentIdIn(documentIds)
         cautions.deleteByDossierId(requireNotNull(dossier.id))
         dossierEvents.deleteByDossierId(requireNotNull(dossier.id))
         dossiers.delete(dossier)
@@ -202,6 +206,16 @@ class CautionModuleApiService(
         caution.updatedAt = caution.finalizedAt!!
     }
 
+    private fun CautionDocumentVersion.toInfo(objectMapper: ObjectMapper): CautionDocumentVersionInfo =
+        CautionDocumentVersionInfo(
+            id = requireNotNull(id),
+            contentBefore = objectMapper.readValue<Map<String, String>>(contentBefore),
+            contentAfter = objectMapper.readValue<Map<String, String>>(contentAfter),
+            reason = reason,
+            actor = actor,
+            createdAt = createdAt,
+        )
+
     private fun CautionDossierEvent.toInfo(): CautionDossierEventInfo =
         CautionDossierEventInfo(
             id = requireNotNull(id),
@@ -246,13 +260,29 @@ class CautionModuleApiService(
     override fun update(
         id: UUID,
         command: UpdateCautionCommand,
+        actor: UUID,
     ): CautionInfo {
         val caution = requireEditable(id)
-        requireRequiredFields(caution.documentType, command.content)
-        caution.contentJson = objectMapper.writeValueAsString(command.content)
+        requireRequiredFields(caution.documentType, command.content, inDossier = caution.dossierId != null)
+        val before = caution.contentJson
+        val after = objectMapper.writeValueAsString(command.content)
+        documentVersions.save(
+            CautionDocumentVersion(
+                documentId = requireNotNull(caution.id),
+                contentBefore = before,
+                contentAfter = after,
+                reason = command.reason,
+                actor = actor,
+            ),
+        )
+        caution.contentJson = after
         caution.updatedAt = Instant.now()
         return caution.toInfo(objectMapper)
     }
+
+    @Transactional(readOnly = true)
+    override fun documentHistory(id: UUID): List<CautionDocumentVersionInfo> =
+        documentVersions.findByDocumentIdOrderByCreatedAtDesc(id).map { it.toInfo(objectMapper) }
 
     @Transactional
     override fun finalize(id: UUID): CautionInfo {
@@ -277,7 +307,9 @@ class CautionModuleApiService(
 
     @Transactional
     override fun delete(id: UUID) {
-        cautions.delete(requireEditable(id))
+        val caution = requireEditable(id)
+        documentVersions.deleteByDocumentIdIn(listOf(requireNotNull(caution.id)))
+        cautions.delete(caution)
     }
 
     /**
@@ -307,14 +339,23 @@ class CautionModuleApiService(
         return caution
     }
 
+    /**
+     * Validates a document's content. Within a dossier only the SPECIFIC fields
+     * are required — the COMMON ones are inherited from the dossier; a legacy
+     * standalone document must still carry every field itself.
+     */
     private fun requireRequiredFields(
         documentType: CautionDocumentType,
         content: Map<String, String>,
+        inDossier: Boolean,
     ) {
-        val missing =
-            CautionFieldRegistry
-                .allFieldsFor(documentType)
-                .filter { !it.optional && content[it.key].isNullOrBlank() }
+        val required =
+            if (inDossier) {
+                CautionFieldRegistry.specificFieldsFor(documentType)
+            } else {
+                CautionFieldRegistry.allFieldsFor(documentType)
+            }
+        val missing = required.filter { !it.optional && content[it.key].isNullOrBlank() }
         if (missing.isNotEmpty()) {
             throw ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
@@ -327,6 +368,7 @@ class CautionModuleApiService(
         CautionInfo(
             id = requireNotNull(id),
             clientId = clientId,
+            dossierId = dossierId,
             documentType = documentType,
             referenceNumber = referenceNumber,
             status = status,

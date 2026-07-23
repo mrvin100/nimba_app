@@ -134,7 +134,7 @@ class CautionModuleTest(
         val created = cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm))
         cautions.finalize(created.id)
 
-        assertFailsWith<ResponseStatusException> { cautions.update(created.id, UpdateCautionCommand(smsContent)) }
+        assertFailsWith<ResponseStatusException> { cautions.update(created.id, UpdateCautionCommand(smsContent), dcm) }
         assertFailsWith<ResponseStatusException> { cautions.finalize(created.id) }
         assertFailsWith<ResponseStatusException> { cautions.delete(created.id) }
     }

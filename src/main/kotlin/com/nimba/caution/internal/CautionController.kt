@@ -57,12 +57,18 @@ class CautionController(
     fun update(
         @PathVariable id: UUID,
         @Valid @RequestBody request: UpdateCautionRequest,
-    ): CautionResponse = cautions.update(id, request.toCommand()).toResponse()
+    ): CautionResponse = cautions.update(id, request.toCommand(), currentUser.id()).toResponse()
 
     @PostMapping("/{id}/finalize")
     fun finalize(
         @PathVariable id: UUID,
     ): CautionResponse = cautions.finalize(id).toResponse()
+
+    /** A document's edit history, newest first. */
+    @GetMapping("/{id}/history")
+    fun history(
+        @PathVariable id: UUID,
+    ): List<DocumentVersionResponse> = cautions.documentHistory(id).map { it.toResponse() }
 
     @GetMapping("/{id}")
     fun getById(

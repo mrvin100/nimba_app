@@ -2,6 +2,7 @@ package com.nimba.caution.internal
 
 import com.nimba.caution.CautionClientSnapshotInfo
 import com.nimba.caution.CautionDocumentType
+import com.nimba.caution.CautionDocumentVersionInfo
 import com.nimba.caution.CautionDossierEventInfo
 import com.nimba.caution.CautionDossierInfo
 import com.nimba.caution.CautionFieldDefinition
@@ -45,9 +46,30 @@ internal fun CreateCautionRequest.toCommand(createdBy: UUID): CreateCautionComma
 
 data class UpdateCautionRequest(
     val content: Map<String, String> = emptyMap(),
+    /** Journaled in the document's history (used notably for a change made during a prorogation). */
+    val reason: String? = null,
 )
 
-internal fun UpdateCautionRequest.toCommand(): UpdateCautionCommand = UpdateCautionCommand(content)
+internal fun UpdateCautionRequest.toCommand(): UpdateCautionCommand = UpdateCautionCommand(content, reason)
+
+data class DocumentVersionResponse(
+    val id: UUID,
+    val contentBefore: Map<String, String>,
+    val contentAfter: Map<String, String>,
+    val reason: String?,
+    val actor: UUID,
+    val createdAt: Instant,
+)
+
+internal fun CautionDocumentVersionInfo.toResponse(): DocumentVersionResponse =
+    DocumentVersionResponse(
+        id = id,
+        contentBefore = contentBefore,
+        contentAfter = contentAfter,
+        reason = reason,
+        actor = actor,
+        createdAt = createdAt,
+    )
 
 data class CautionResponse(
     val id: UUID,

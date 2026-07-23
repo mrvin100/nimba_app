@@ -171,6 +171,63 @@ class CautionDossierTest(
     }
 
     @Test
+    fun `a document inherits its dossier's common fields at render, requiring only its specific fields`() {
+        val dcm = dcmMemberId()
+        val client = clientId(dcm)
+        // The dossier carries the common context (bénéficiaire, montant, signataires…).
+        val dossier = cautions.createDossier(CreateDossierCommand(client, smsContent, dcm))
+        // The document provides only its SPECIFIC fields; the common ones are inherited.
+        val document =
+            cautions.create(
+                CreateCautionCommand(
+                    client,
+                    CautionDocumentType.SMS,
+                    mapOf("dateOffre" to "2026-02-13", "dateExpiration" to "2026-05-13"),
+                    dcm,
+                    dossierId = dossier.id,
+                ),
+            )
+        cautions.finalizeDossier(dossier.id, dcm)
+
+        val text = docText(export.export(document.id).content)
+
+        assertContains(text, "MINISTERE DE L'ELEVAGE") // bénéficiaire inherited from the dossier
+        assertContains(text, "306 000 000") // montant inherited from the dossier
+        assertContains(text, "13 Mai 2026") // dateExpiration, the document's own specific field
+    }
+
+    @Test
+    fun `editing a document records a version with before, after, reason and actor`() {
+        val dcm = dcmMemberId()
+        val client = clientId(dcm)
+        val dossier = cautions.createDossier(CreateDossierCommand(client, smsContent, dcm))
+        val document =
+            cautions.create(
+                CreateCautionCommand(
+                    client,
+                    CautionDocumentType.SMS,
+                    mapOf("dateOffre" to "2026-02-13", "dateExpiration" to "2026-05-13"),
+                    dcm,
+                    dossierId = dossier.id,
+                ),
+            )
+
+        cautions.update(
+            document.id,
+            UpdateCautionCommand(mapOf("dateOffre" to "2026-02-14", "dateExpiration" to "2026-05-20"), reason = "Correction de la date"),
+            dcm,
+        )
+
+        val history = cautions.documentHistory(document.id)
+        assertEquals(1, history.size)
+        val version = history.first()
+        assertEquals("2026-02-13", version.contentBefore["dateOffre"])
+        assertEquals("2026-02-14", version.contentAfter["dateOffre"])
+        assertEquals("Correction de la date", version.reason)
+        assertEquals(dcm, version.actor)
+    }
+
+    @Test
     fun `exports the dossier notification with its sections and entered content`() {
         val dcm = dcmMemberId()
         val client =

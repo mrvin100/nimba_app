@@ -2,6 +2,7 @@ package com.nimba.caution.internal
 
 import com.nimba.caution.CautionClientSnapshotInfo
 import com.nimba.caution.CautionDocumentType
+import com.nimba.caution.CautionFieldRegistry
 import com.nimba.caution.CautionInfo
 import com.nimba.caution.CautionModuleApi
 import com.nimba.client.ClientInfo
@@ -75,8 +76,10 @@ class CautionDocxExportService(
 
     @Transactional(readOnly = true)
     fun export(id: UUID): CautionExport {
-        val caution =
+        val stored =
             cautions.findById(id) ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Caution introuvable")
+        // Resolve the document's effective content: it inherits its dossier's common fields and overrides with its own.
+        val caution = resolveEffective(stored)
         // A finalized caution carries its frozen snapshot; a draft preview reads the client live.
         val snapshot = caution.clientSnapshot ?: liveSnapshot(caution.clientId)
 
@@ -97,6 +100,19 @@ class CautionDocxExportService(
             }
         val suffix = if (caution.clientSnapshot == null) "-brouillon" else ""
         return CautionExport("caution-${caution.referenceNumber}$suffix.docx", bytes)
+    }
+
+    /**
+     * A document's effective content for rendering: the dossier's common fields
+     * inherited, then overridden by the document's own answers (see
+     * [CautionFieldRegistry.effectiveContent]). A legacy standalone document, or
+     * one whose dossier is gone, renders from its own content as before.
+     */
+    private fun resolveEffective(caution: CautionInfo): CautionInfo {
+        val dossier = caution.dossierId?.let { cautions.findDossier(it) } ?: return caution
+        val commonKeys = CautionFieldRegistry.commonFields().map { it.key }.toSet()
+        val common = dossier.content.filterKeys { it in commonKeys }
+        return caution.copy(content = CautionFieldRegistry.effectiveContent(common, caution.content))
     }
 
     /** The live client record projected onto the same shape as the frozen snapshot, for draft previews. */

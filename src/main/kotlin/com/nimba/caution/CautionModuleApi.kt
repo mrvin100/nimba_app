@@ -20,11 +20,15 @@ interface CautionModuleApi {
      */
     fun create(command: CreateCautionCommand): CautionInfo
 
-    /** Replaces a draft's field answers; 409 once the caution is FINAL. */
+    /** Replaces a document's field answers and records a history version. Refused when the dossier is locked (FINALISE). */
     fun update(
         id: UUID,
         command: UpdateCautionCommand,
+        actor: UUID,
     ): CautionInfo
+
+    /** A document's edit history, newest first. */
+    fun documentHistory(id: UUID): List<CautionDocumentVersionInfo>
 
     /** Locks the caution, freezing a snapshot of the issuing client's identity. 409 if already FINAL. */
     fun finalize(id: UUID): CautionInfo
