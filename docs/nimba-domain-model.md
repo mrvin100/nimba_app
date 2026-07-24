@@ -138,38 +138,96 @@ de l'identité client (`CautionClientSnapshot`).
 
 ---
 
-## 6. Comment ajouter un produit de crédit (guide d'extension) **[CIBLE]**
+## 6. Comment ajouter un produit de crédit (guide d'extension) **[ACTUEL]**
 
-1. **Choisir l'archétype** : le produit est-il un **financement amorti** (comme le
-   leasing → réutilise la colonne vertébrale `creditcase` : TA/FA/PV/FMP/workflow comité)
-   ou un **engagement / document généré** (comme la caution → module dédié léger) ?
-   Un archétype vraiment nouveau justifie un module frère ; sinon, réutiliser l'existant.
-2. **Déclarer le produit et ses variantes** dans le `ProductCatalog` (famille, variantes,
-   registre, direction pilote, `LifecycleKind`).
-3. **Définir la politique par variante** (documents requis, champs, layouts) dans la
-   politique du module d'accueil (`CaseTypePolicy` côté financement, `CautionFieldRegistry`
-   côté caution) — **sans toucher aux autres produits** (invariant §2).
-4. **Rattacher au Client unique** par `clientId` (jamais de FK JPA cross-module).
-5. **Ne pas dupliquer le transverse** : réutiliser numérotation, journal, snapshot.
+Checklist concrète, avec les points d'extension réels. Chemins backend relatifs à
+`app/src/main/kotlin/com/nimba/`, frontend à `web/components/`.
+
+### 6.0 Étape commune à tout produit — le catalogue
+Déclarer la famille dans **`catalog/ProductFamily.kt`** : une valeur d'enum avec
+`label`, `department` (code direction pilote), `lifecycle` (`FINANCEMENT` | `ENGAGEMENT`).
+Rien d'autre à faire pour la navigation : `GET /catalog/products` l'expose, et le
+frontend (registres + fil d'Ariane) la reprend automatiquement via le module
+`components/modules/catalog`. **C'est le seul point d'entrée obligatoire.**
+
+Puis choisir l'archétype (§3) : **financement amorti** → §6.A (réutilise `creditcase`) ;
+**engagement / document généré** → §6.B (module frère). Ne jamais forcer un produit dans
+le mauvais archétype (voir §3).
+
+### 6.A Produit de FINANCEMENT (hébergé par `creditcase`)
+1. **`creditcase/ProductType.kt`** : ajouter la valeur d'enum + la mapper vers la
+   `ProductFamily` de §6.0 dans `ProductType.family()`.
+2. **`creditcase/CaseTypePolicy.kt`** : ajouter une entrée dans `CaseTypePolicies.ALL`
+   **par variante** — `requiredDocuments` (`DocumentKind`), `scheduleFormat`
+   (`ScheduleFormat`), `faVariant` (`FaVariant`), `generatesTraites`. Cela pilote le
+   sélecteur de type à la création (`GET /credit-cases/types` via `CaseTypeController`)
+   et la validation create/update — **aucun consommateur à toucher**.
+3. **Variantes** : si le produit en a, réutiliser/étendre `creditcase/ContractType.kt`.
+   Le **workflow reste inchangé** (invariant §2) — une variante ne diffère que par
+   documents / champs / layouts.
+4. **FA** : si la fiche d'analyse diffère, étendre `analysissheet/FaSectionRegistry.kt`
+   (+ `FaVariant`, `FaSectionKey.kt`). Les sections COMPUTED/BOUND se dérivent seules.
+5. **Client** : rien à faire — un dossier référence déjà un `Client` par `clientId` et le
+   formulaire de création sélectionne le client (`components/modules/credit-case`).
+6. **Frontend** : rien de spécifique — le produit apparaît dans le registre DRI
+   (`credit-case/registre-view.tsx`, piloté par le catalogue) dès §6.0.
+
+### 6.B Nouvel ARCHÉTYPE (module frère, façon `caution`)
+À réserver à un produit qui n'est **pas** un crédit amorti (pas d'échéancier/TA/comité).
+Créer un module `com.nimba.<produit>` en miroir de `com.nimba.caution` :
+1. Agrégat racine + documents/enfants typés, avec **son propre cycle de vie** (cf.
+   `caution/DossierStatus.kt`), **jamais** le workflow comité du financement.
+2. Registry de champs par type (cf. `caution/CautionFieldType.kt` : scopes
+   `COMMON`/`SPECIFIC`, héritage `effectiveContent`).
+3. Numérotation propre (cf. `caution/internal/CautionNumberGenerator.kt` — même mécanique
+   d'upsert atomique ; **candidat noyau partagé**, ne pas copier-coller si extrait).
+4. **Référencer `Client` par `clientId`** (jamais de FK JPA cross-module) ; si le produit
+   exige le matricule (comme la caution), le vérifier à la création (400 sinon).
+5. Journaliser le cycle de vie (cf. `caution/internal/CautionDossierEvent`) ; figer un
+   snapshot client à la finalisation si le document devient un acte officiel.
+6. **Frontend** : nouveau module `components/modules/<produit>` (schema/service/hook/vues)
+   + routes + entrée de nav dans `components/shared/workspace-registry.ts`, en miroir de
+   `caution` / `client-file`.
+
+### 6.C Transverse (les deux archétypes)
+- **RBAC** : si une nouvelle direction pilote le produit, ajouter le matcher dans
+  `shared/security/SecurityConfig.kt` (ordre : spécifique avant le catch-all). `/clients`
+  est déjà partagé DRI+DCM.
+- **Vue client 360** : un nouveau produit apparaît dans la fiche client dès qu'on ajoute
+  sa liste `by-client` dans `components/modules/client-file/client-file-view.tsx` (le
+  backend expose déjà `?clientId=` côté financement ; côté caution `listDossiers(clientId)`).
+- **Tests** : refléter les tests existants du module modèle. **Toute migration qui touche
+  des lignes existantes** doit avoir un test Flyway à deux phases (cf.
+  `app/src/test/.../creditcase/ClientUnificationMigrationTest.kt` — migrer jusqu'à N-1,
+  insérer des lignes legacy, migrer N, asserter).
+
+### 6.D Invariant à ne jamais violer
+Le **workflow se définit au niveau du Produit** ; une **variante** ne diffère que par les
+documents requis, les champs et les layouts générés — **jamais** par le workflow (§2).
 
 ---
 
-## 7. Refonte en cours (Client unique + catalogue produit)
+## 7. Refonte réalisée (Client unique + catalogue produit) — NIMBA-83
 
-Motivation : le code a divergé — l'identité client est aujourd'hui **dupliquée** entre
-`Client` (module client, utilisé par la caution) et `CreditCase.clientIdentity`
-(embeddable, utilisé par le financement), ce qui rend impossible la vue « un client,
-plusieurs produits ». La granularité produit est incohérente (MC2/MUFFA = valeur d'enum ;
-Caution = module). La refonte :
+Motivation : le code avait divergé — l'identité client était **dupliquée** entre `Client`
+(module client, caution) et `CreditCase.clientIdentity` (embeddable, financement), rendant
+impossible la vue « un client, plusieurs produits » ; granularité produit incohérente
+(MC2/MUFFA = valeur d'enum ; Caution = module). Réalisé :
 
-- **Phase 1** — `ProductCatalog` dans `shared` (famille → variante, registre, direction,
-  `LifecycleKind`) ; point d'extension unique, additif.
-- **Phase 2** — **Unification Client** : `Client` devient la source unique (ajout d'un
-  discriminant `ClientType`, **matricule optionnel / unique si présent**, *particulier-ready*) ;
-  `CreditCase` référence `clientId` et **abandonne** l'embeddable `ClientIdentity` ; la
-  création d'un dossier de financement **sélectionne un Client existant** (comme la caution).
-  Les snapshots figés (PV/FMP, caution) sont inchangés — seul le chemin de lecture *vive* migre.
-- **Phase 3** — extraction du noyau transverse (numérotation, journal) là où la
-  duplication est réelle.
-- **Phase 4** — frontend : sélecteur de client à la création, registres pilotés par le
-  catalogue, **vue client 360** (tous les dossiers d'un client, financement + cautions).
+- **Phase 1 — FAIT** : module `catalog` (`ProductFamily` / `LifecycleKind` / `ProductCatalog`,
+  `GET /catalog/products`). `ProductType.family()` relie le financement au catalogue.
+- **Phase 2 — FAIT** : **unification Client** — `ClientType` (particulier-ready), **matricule
+  optionnel / unique si présent** ; `CreditCase` référence `clientId`, l'embeddable
+  `ClientIdentity` supprimé. `CreditCaseInfo.clientName`/`clientIdentity` **résolus depuis le
+  Client** → traités, FA/PV/FMP, workflow inchangés. Création de dossier = choix d'un Client
+  (comme la caution). Migrations V35/V36 (dédup par `code_nif`, test à deux phases). `/clients`
+  ouvert à la DRI.
+- **Phase 3 — partiel** : numérotation/journal restent des **candidats noyau** (pas encore
+  extraits ; duplication tolérée tant qu'un seul autre module la porte).
+- **Phase 4 — FAIT** : sélecteur de client à la création ; édition d'identité repointée sur le
+  Client ; **registres pilotés par le catalogue** (`registre-view.tsx`) ; **vue client 360**
+  (`components/modules/client-file` : dossiers financement + cautions) ; écran d'édition
+  complète de la fiche client.
+
+**Reste ouvert** : produits *particulier* (readiness posée, non construits) ; extraction du
+noyau transverse (Phase 3) ; intégration de nouveaux produits via le guide §6.
