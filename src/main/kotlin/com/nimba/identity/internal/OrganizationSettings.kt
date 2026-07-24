@@ -35,6 +35,24 @@ class OrganizationSettings {
     @Column(name = "logo_content_type")
     var logoContentType: String? = null
 
+    /**
+     * Standing signatories printed on generated legal documents (first
+     * consumer: the Caution module's SMS/ACF) — configured once here rather
+     * than re-typed on every document, since they rarely change. Both null
+     * until an admin configures them.
+     */
+    @Column(name = "signataire1_nom")
+    var signataire1Nom: String? = null
+
+    @Column(name = "signataire1_titre")
+    var signataire1Titre: String? = null
+
+    @Column(name = "signataire2_nom")
+    var signataire2Nom: String? = null
+
+    @Column(name = "signataire2_titre")
+    var signataire2Titre: String? = null
+
     @Column(name = "updated_at", nullable = false)
     var updatedAt: Instant = Instant.now()
 

@@ -10,6 +10,10 @@ data class OrganizationResponse(
     val senderName: String,
     val senderEmail: String,
     val hasLogo: Boolean,
+    val signataire1Nom: String?,
+    val signataire1Titre: String?,
+    val signataire2Nom: String?,
+    val signataire2Titre: String?,
     val updatedAt: Instant,
 )
 
@@ -17,6 +21,10 @@ data class UpdateOrganizationRequest(
     @field:NotBlank @field:Size(max = 200) val organizationName: String,
     @field:NotBlank @field:Size(max = 200) val senderName: String,
     @field:Email @field:NotBlank @field:Size(max = 320) val senderEmail: String,
+    @field:Size(max = 200) val signataire1Nom: String? = null,
+    @field:Size(max = 200) val signataire1Titre: String? = null,
+    @field:Size(max = 200) val signataire2Nom: String? = null,
+    @field:Size(max = 200) val signataire2Titre: String? = null,
 )
 
 internal fun OrganizationSettings.toResponse() =
@@ -25,5 +33,9 @@ internal fun OrganizationSettings.toResponse() =
         senderName = senderName,
         senderEmail = senderEmail,
         hasLogo = logoKey != null,
+        signataire1Nom = signataire1Nom,
+        signataire1Titre = signataire1Titre,
+        signataire2Nom = signataire2Nom,
+        signataire2Titre = signataire2Titre,
         updatedAt = updatedAt,
     )

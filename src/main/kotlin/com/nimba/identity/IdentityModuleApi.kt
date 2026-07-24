@@ -23,4 +23,19 @@ interface IdentityModuleApi {
 
     /** The configured organisation logo, or null when none has been uploaded. */
     fun organizationLogo(): OrganizationLogo?
+
+    /**
+     * The two standing signatories printed on generated legal documents
+     * (first consumer: the Caution module) — null until an admin configures
+     * at least one of them.
+     */
+    fun organizationSignatories(): OrganizationSignatories
 }
+
+/** Either signatory is null until configured; a caller prints "RAS" or similar for a missing one. */
+data class OrganizationSignatories(
+    val signataire1Nom: String?,
+    val signataire1Titre: String?,
+    val signataire2Nom: String?,
+    val signataire2Titre: String?,
+)
