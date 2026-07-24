@@ -21,6 +21,7 @@ import java.util.UUID
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @Import(TestcontainersConfiguration::class)
@@ -76,7 +77,7 @@ class CautionDossierTest(
                 ),
             )
         assertContains(dossier.referenceNumber, "-DOS-")
-        assertEquals(DossierStatus.OPEN, dossier.status)
+        assertEquals(DossierStatus.BROUILLON, dossier.status)
 
         val sms = cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm, dossierId = dossier.id))
         val afc = cautions.create(CreateCautionCommand(client, CautionDocumentType.AFC, smsContent, dcm, dossierId = dossier.id))
@@ -110,19 +111,123 @@ class CautionDossierTest(
     }
 
     @Test
-    fun `amending a dossier bumps its version and closing it is a one-way step`() {
+    fun `deleting a dossier removes it and cascades to its documents`() {
         val dcm = dcmMemberId()
         val client = clientId(dcm)
         val dossier = cautions.createDossier(CreateDossierCommand(client, emptyMap(), dcm))
-        assertEquals(1, dossier.version)
-        assertEquals(DossierStatus.OPEN, dossier.status)
+        cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm, dossierId = dossier.id))
+        cautions.create(CreateCautionCommand(client, CautionDocumentType.AFC, smsContent, dcm, dossierId = dossier.id))
+        assertEquals(2, cautions.dossierDocuments(dossier.id).size)
 
-        val amended = cautions.updateDossier(dossier.id, mapOf("beneficiaire" to "MINISTERE DE L'ELEVAGE"))
+        cautions.deleteDossier(dossier.id)
+
+        assertNull(cautions.findDossier(dossier.id))
+        assertTrue(cautions.dossierDocuments(dossier.id).isEmpty())
+        assertFailsWith<ResponseStatusException> { cautions.deleteDossier(dossier.id) }
+    }
+
+    @Test
+    fun `finalize locks the dossier, proroge reopens it, refinalize re-locks and journals every step`() {
+        val dcm = dcmMemberId()
+        val client = clientId(dcm)
+        val dossier = cautions.createDossier(CreateDossierCommand(client, emptyMap(), dcm))
+        assertEquals(DossierStatus.BROUILLON, dossier.status)
+        cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm, dossierId = dossier.id))
+
+        // BROUILLON: amend allowed, business version bumps.
+        val amended = cautions.updateDossier(dossier.id, mapOf("beneficiaire" to "EDG"))
         assertEquals(2, amended.version)
 
-        val closed = cautions.closeDossier(dossier.id)
-        assertEquals(DossierStatus.CLOSED, closed.status)
-        assertFailsWith<ResponseStatusException> { cautions.closeDossier(dossier.id) }
+        // Finalize the request: the dossier locks and its documents are frozen.
+        val finalized = cautions.finalizeDossier(dossier.id, dcm)
+        assertEquals(DossierStatus.FINALISE, finalized.status)
+        assertTrue(cautions.dossierDocuments(dossier.id).all { it.status == CautionStatus.FINAL })
+        assertFailsWith<ResponseStatusException> { cautions.updateDossier(dossier.id, mapOf("x" to "y")) }
+
+        // Proroge (manager): reopens for a targeted correction.
+        val prorogated = cautions.prorogeDossier(dossier.id, dcm, "Report d'échéance par le maître d'ouvrage")
+        assertEquals(DossierStatus.EN_PROROGATION, prorogated.status)
+        cautions.updateDossier(dossier.id, mapOf("beneficiaire" to "EDG SA")) // writable again
+
+        // Refinalize: re-locks and bumps the business version.
+        val refinalized = cautions.refinalizeDossier(dossier.id, dcm)
+        assertEquals(DossierStatus.FINALISE, refinalized.status)
+        assertTrue(refinalized.version > finalized.version)
+
+        val events = cautions.dossierEvents(dossier.id)
+        assertEquals(
+            setOf(DossierAction.FINALIZE, DossierAction.PROROGE, DossierAction.REFINALIZE),
+            events.map { it.action }.toSet(),
+        )
+        assertTrue(events.any { it.reason == "Report d'échéance par le maître d'ouvrage" })
+    }
+
+    @Test
+    fun `proroge requires a finalized dossier`() {
+        val dcm = dcmMemberId()
+        val client = clientId(dcm)
+        val dossier = cautions.createDossier(CreateDossierCommand(client, emptyMap(), dcm))
+        assertFailsWith<ResponseStatusException> { cautions.prorogeDossier(dossier.id, dcm, "motif") }
+    }
+
+    @Test
+    fun `a document inherits its dossier's common fields at render, requiring only its specific fields`() {
+        val dcm = dcmMemberId()
+        val client = clientId(dcm)
+        // The dossier carries the common context (bénéficiaire, montant, signataires…).
+        val dossier = cautions.createDossier(CreateDossierCommand(client, smsContent, dcm))
+        // The document provides only its SPECIFIC fields (amount, currency, dates); the common ones are inherited.
+        val document =
+            cautions.create(
+                CreateCautionCommand(
+                    client,
+                    CautionDocumentType.SMS,
+                    mapOf("devise" to "GNF", "montant" to "306000000", "dateOffre" to "2026-02-13", "dateExpiration" to "2026-05-13"),
+                    dcm,
+                    dossierId = dossier.id,
+                ),
+            )
+        cautions.finalizeDossier(dossier.id, dcm)
+
+        val text = docText(export.export(document.id).content)
+
+        assertContains(text, "MINISTERE DE L'ELEVAGE") // bénéficiaire inherited from the dossier
+        assertContains(text, "306 000 000") // montant, the document's own specific field
+        assertContains(text, "13 Mai 2026") // dateExpiration, the document's own specific field
+    }
+
+    @Test
+    fun `editing a document records a version with before, after, reason and actor`() {
+        val dcm = dcmMemberId()
+        val client = clientId(dcm)
+        val dossier = cautions.createDossier(CreateDossierCommand(client, smsContent, dcm))
+        val document =
+            cautions.create(
+                CreateCautionCommand(
+                    client,
+                    CautionDocumentType.SMS,
+                    mapOf("devise" to "GNF", "montant" to "306000000", "dateOffre" to "2026-02-13", "dateExpiration" to "2026-05-13"),
+                    dcm,
+                    dossierId = dossier.id,
+                ),
+            )
+
+        cautions.update(
+            document.id,
+            UpdateCautionCommand(
+                mapOf("devise" to "GNF", "montant" to "306000000", "dateOffre" to "2026-02-14", "dateExpiration" to "2026-05-20"),
+                reason = "Correction de la date",
+            ),
+            dcm,
+        )
+
+        val history = cautions.documentHistory(document.id)
+        assertEquals(1, history.size)
+        val version = history.first()
+        assertEquals("2026-02-13", version.contentBefore["dateOffre"])
+        assertEquals("2026-02-14", version.contentAfter["dateOffre"])
+        assertEquals("Correction de la date", version.reason)
+        assertEquals(dcm, version.actor)
     }
 
     @Test

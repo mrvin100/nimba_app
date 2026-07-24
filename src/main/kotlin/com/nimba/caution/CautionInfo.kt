@@ -18,6 +18,8 @@ data class CautionClientSnapshotInfo(
 data class CautionInfo(
     val id: UUID,
     val clientId: UUID,
+    /** The dossier this document belongs to, or null for a legacy standalone document. */
+    val dossierId: UUID?,
     val documentType: CautionDocumentType,
     val referenceNumber: String,
     val status: CautionStatus,

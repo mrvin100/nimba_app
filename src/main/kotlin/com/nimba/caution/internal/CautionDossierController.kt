@@ -13,6 +13,7 @@ import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -55,11 +56,37 @@ class CautionDossierController(
         @Valid @RequestBody request: UpdateDossierRequest,
     ): DossierResponse = cautions.updateDossier(id, request.content).toResponse()
 
-    /** Closes a dossier once its request is fully served (a critical, manager-gated step). */
-    @PostMapping("/{id}/close")
-    fun close(
+    /** Finalizes the client's request: freezes every document and locks the dossier. */
+    @PostMapping("/{id}/finalize")
+    fun finalize(
         @PathVariable id: UUID,
-    ): DossierResponse = cautions.closeDossier(id).toResponse()
+    ): DossierResponse = cautions.finalizeDossier(id, currentUser.id()).toResponse()
+
+    /** Reopens a finalized dossier to correct a document (manager-gated); the reason is journaled. */
+    @PostMapping("/{id}/proroge")
+    fun proroge(
+        @PathVariable id: UUID,
+        @Valid @RequestBody request: ProrogeDossierRequest,
+    ): DossierResponse = cautions.prorogeDossier(id, currentUser.id(), request.reason).toResponse()
+
+    /** Re-locks a prorogated dossier once the correction is done. */
+    @PostMapping("/{id}/refinalize")
+    fun refinalize(
+        @PathVariable id: UUID,
+    ): DossierResponse = cautions.refinalizeDossier(id, currentUser.id()).toResponse()
+
+    /** The dossier's lifecycle journal (finalize / proroge / refinalize), newest first. */
+    @GetMapping("/{id}/events")
+    fun events(
+        @PathVariable id: UUID,
+    ): List<DossierEventResponse> = cautions.dossierEvents(id).map { it.toResponse() }
+
+    /** Deletes a dossier and all of its documents (manager-gated). */
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    fun delete(
+        @PathVariable id: UUID,
+    ) = cautions.deleteDossier(id)
 
     @GetMapping("/{id}")
     fun getById(
