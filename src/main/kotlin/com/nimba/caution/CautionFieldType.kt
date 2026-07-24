@@ -64,6 +64,12 @@ object CautionFieldRegistry {
                 ),
             CautionDocumentType.ACF to emptyList(),
             CautionDocumentType.AFC to emptyList(),
+            CautionDocumentType.PRO to
+                listOf(
+                    CautionFieldDefinition("cautionOrigineReference", "Référence de la caution d'origine", CautionFieldType.TEXT),
+                    CautionFieldDefinition("cautionOrigineDate", "Date d'émission de la caution d'origine", CautionFieldType.DATE),
+                    CautionFieldDefinition("nouvelleDateExpiration", "Nouvelle date d'expiration", CautionFieldType.DATE),
+                ),
         )
 
     fun specificFieldsFor(type: CautionDocumentType): List<CautionFieldDefinition> = SPECIFIC_FIELDS.getValue(type)

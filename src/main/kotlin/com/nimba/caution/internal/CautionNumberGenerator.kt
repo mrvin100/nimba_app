@@ -36,6 +36,19 @@ class CautionNumberGenerator(
         matricule: String,
         documentType: CautionDocumentType,
         startingSequence: Int? = null,
+    ): String = reference(matricule, documentType.code, startingSequence)
+
+    /** A dossier's reference, drawn from the same global sequence as its documents, with a `DOS` code. */
+    @Transactional
+    fun nextDossierReferenceNumber(
+        matricule: String,
+        startingSequence: Int? = null,
+    ): String = reference(matricule, DOSSIER_CODE, startingSequence)
+
+    private fun reference(
+        matricule: String,
+        code: String,
+        startingSequence: Int?,
     ): String {
         val sequence =
             jdbcClient
@@ -49,7 +62,7 @@ class CautionNumberGenerator(
                 .query(Int::class.java)
                 .single()
         val date = LocalDate.now(clock).format(dateFormat)
-        return "%05d-%s-%s-%s".format(sequence, matricule, documentType.code, date)
+        return "%05d-%s-%s-%s".format(sequence, matricule, code, date)
     }
 
     /** Whether any caution has ever been created — the frontend only offers [nextReferenceNumber]'s starting-sequence override before this becomes true. */
@@ -59,4 +72,8 @@ class CautionNumberGenerator(
             .sql("SELECT count(*) FROM caution_counter WHERE id = 1")
             .query(Int::class.java)
             .single() > 0
+
+    private companion object {
+        const val DOSSIER_CODE = "DOS"
+    }
 }

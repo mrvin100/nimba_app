@@ -13,4 +13,5 @@ enum class CautionDocumentType(
     SMS("SMS", "Caution de Soumission"),
     ACF("ACF", "Attestation de Capacité Financière"),
     AFC("AFC", "Attestation de Facilité de Crédit"),
+    PRO("PRO", "Avenant de Prorogation"),
 }

@@ -44,7 +44,34 @@ interface CautionModuleApi {
 
     /** Whether any caution has ever been created — drives whether the create form still offers a starting-sequence override. */
     fun referenceSequenceInitialized(): Boolean
+
+    /** Opens a caution dossier (one client request against one appel d'offres) and assigns its reference number. 404 if the client is unknown. */
+    fun createDossier(command: CreateDossierCommand): CautionDossierInfo
+
+    /** Replaces a dossier's shared market/companion content and bumps its version. 404 if unknown. */
+    fun updateDossier(
+        id: UUID,
+        content: Map<String, String>,
+    ): CautionDossierInfo
+
+    /** Closes a dossier once its request is fully served. 404 if unknown; 409 if already closed. */
+    fun closeDossier(id: UUID): CautionDossierInfo
+
+    fun findDossier(id: UUID): CautionDossierInfo?
+
+    /** Pages through dossiers, newest first; the client filter is optional. */
+    fun listDossiers(
+        pageable: Pageable,
+        clientId: UUID? = null,
+    ): Page<CautionDossierInfo>
+
+    /** Every document attached to a dossier, newest first. */
+    fun dossierDocuments(dossierId: UUID): List<CautionInfo>
 }
+
+/** Resolves a dossier or fails with the module's canonical 404. */
+fun CautionModuleApi.dossierOrThrow(id: UUID): CautionDossierInfo =
+    findDossier(id) ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Dossier introuvable")
 
 /** Resolves a caution or fails with the module's canonical 404. */
 fun CautionModuleApi.getOrThrow(id: UUID): CautionInfo =

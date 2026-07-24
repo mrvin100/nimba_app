@@ -2,12 +2,15 @@ package com.nimba.caution.internal
 
 import com.nimba.caution.CautionClientSnapshotInfo
 import com.nimba.caution.CautionDocumentType
+import com.nimba.caution.CautionDossierInfo
 import com.nimba.caution.CautionFieldDefinition
 import com.nimba.caution.CautionFieldRegistry
 import com.nimba.caution.CautionFieldType
 import com.nimba.caution.CautionInfo
 import com.nimba.caution.CautionStatus
 import com.nimba.caution.CreateCautionCommand
+import com.nimba.caution.CreateDossierCommand
+import com.nimba.caution.DossierStatus
 import com.nimba.caution.UpdateCautionCommand
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Positive
@@ -23,6 +26,8 @@ data class CreateCautionRequest(
     /** Only takes effect for the very first caution ever created — see `CautionNumberGenerator`'s KDoc. */
     @field:Positive
     val startingReferenceSequence: Int? = null,
+    /** The dossier this document belongs to, or null when created standalone. */
+    val dossierId: UUID? = null,
 )
 
 internal fun CreateCautionRequest.toCommand(createdBy: UUID): CreateCautionCommand =
@@ -32,6 +37,7 @@ internal fun CreateCautionRequest.toCommand(createdBy: UUID): CreateCautionComma
         content = content,
         createdBy = createdBy,
         startingReferenceSequence = startingReferenceSequence,
+        dossierId = dossierId,
     )
 
 data class UpdateCautionRequest(
@@ -115,4 +121,53 @@ internal fun documentTypeResponses(): List<CautionDocumentTypeResponse> =
 
 data class ReferenceSequenceStatusResponse(
     val initialized: Boolean,
+)
+
+data class CreateDossierRequest(
+    @field:NotNull
+    val clientId: UUID,
+    val content: Map<String, String> = emptyMap(),
+    @field:Positive
+    val startingReferenceSequence: Int? = null,
+)
+
+internal fun CreateDossierRequest.toCommand(createdBy: UUID): CreateDossierCommand =
+    CreateDossierCommand(
+        clientId = clientId,
+        content = content,
+        createdBy = createdBy,
+        startingReferenceSequence = startingReferenceSequence,
+    )
+
+data class UpdateDossierRequest(
+    val content: Map<String, String> = emptyMap(),
+)
+
+data class DossierResponse(
+    val id: UUID,
+    val clientId: UUID,
+    val referenceNumber: String,
+    val status: DossierStatus,
+    val version: Int,
+    val content: Map<String, String>,
+    val createdAt: Instant,
+    val updatedAt: Instant,
+)
+
+internal fun CautionDossierInfo.toResponse(): DossierResponse =
+    DossierResponse(
+        id = id,
+        clientId = clientId,
+        referenceNumber = referenceNumber,
+        status = status,
+        version = version,
+        content = content,
+        createdAt = createdAt,
+        updatedAt = updatedAt,
+    )
+
+/** A dossier together with the documents attached to it, for the dossier detail view. */
+data class DossierDetailResponse(
+    val dossier: DossierResponse,
+    val documents: List<CautionResponse>,
 )

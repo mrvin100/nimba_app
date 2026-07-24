@@ -171,6 +171,43 @@ class CautionDocxExportTest(
     }
 
     @Test
+    fun `exports a finalized prorogation avenant referencing the original caution`() {
+        val dcm = dcmMemberId()
+        val client =
+            clients.create(CreateClientCommand("M-${UUID.randomUUID()}", "SOCIETE X", dcm, agence = "Kaloum")).id
+        val created =
+            cautions.create(
+                CreateCautionCommand(
+                    clientId = client,
+                    documentType = CautionDocumentType.PRO,
+                    content =
+                        signatoryFields() +
+                            mapOf(
+                                "beneficiaire" to "EDG SA",
+                                "referenceAppelOffres" to "007/EDG-SA/2025",
+                                "objetMarche" to "Travaux",
+                                "devise" to "GNF",
+                                "montant" to "238756476",
+                                "dateEmission" to "2026-07-21",
+                                "cautionOrigineReference" to "04370-038044-SMS-11-02-26",
+                                "cautionOrigineDate" to "2026-02-11",
+                                "nouvelleDateExpiration" to "2026-12-31",
+                            ),
+                    createdBy = dcm,
+                ),
+            )
+        cautions.finalize(created.id)
+
+        val result = export.export(created.id)
+        val text = allText(result.content)
+
+        assertContains(text, "AVENANT DE PROROGATION")
+        assertContains(text, "04370-038044-SMS-11-02-26")
+        assertContains(text, "Prorogeons par la présente")
+        assertContains(text, "31 Décembre 2026")
+    }
+
+    @Test
     fun `exports a draft as a preview rendered from the live client`() {
         val dcm = dcmMemberId()
         val client =
