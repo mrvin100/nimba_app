@@ -1,7 +1,10 @@
 package com.nimba.client.internal
 
+import com.nimba.client.ClientType
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
+import jakarta.persistence.EnumType
+import jakarta.persistence.Enumerated
 import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
@@ -26,8 +29,14 @@ import java.util.UUID
 @Entity
 @Table(name = "client")
 class Client(
-    @Column(name = "matricule", nullable = false, unique = true, updatable = false)
-    val matricule: String,
+    /**
+     * The bank's internal client code. Optional: a client created from a migrated
+     * leasing dossier may not have one yet (it is captured later), while the Caution
+     * module requires it to issue a document. Unique when present (a partial unique
+     * index, so several matricule-less clients can coexist).
+     */
+    @Column(name = "matricule", updatable = false)
+    val matricule: String? = null,
     @Column(name = "raison_sociale", nullable = false)
     var raisonSociale: String,
     @Column(name = "created_by", nullable = false, updatable = false)
@@ -36,6 +45,10 @@ class Client(
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     var id: UUID? = null
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "type", nullable = false)
+    var type: ClientType = ClientType.ENTREPRISE
 
     @Column(name = "sigle")
     var sigle: String? = null

@@ -39,6 +39,7 @@ class CaseSettingsTest(
     @Autowired private val settings: CaseSettingsController,
     @Autowired private val workflow: WorkflowService,
     @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val clients: com.nimba.client.ClientModuleApi,
     @Autowired private val analysisSheets: AnalysisSheetModuleApi,
     @Autowired private val schedules: AmortizationScheduleRepository,
     @Autowired private val scheduleApi: AmortizationScheduleModuleApi,
@@ -50,7 +51,13 @@ class CaseSettingsTest(
         val caseId =
             creditCases
                 .createCase(
-                    CreateCreditCaseCommand("Client Settings", ProductType.LEASING, "GNF", dri, contractType = ContractType.AVEC_CONTRAT),
+                    CreateCreditCaseCommand(
+                        com.nimba.seedClient(clients, "Client Settings"),
+                        ProductType.LEASING,
+                        "GNF",
+                        dri,
+                        contractType = ContractType.AVEC_CONTRAT,
+                    ),
                 ).id
         val line =
             AmortizationScheduleLine(

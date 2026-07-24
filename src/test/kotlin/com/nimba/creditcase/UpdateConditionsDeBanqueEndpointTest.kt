@@ -24,6 +24,7 @@ class UpdateConditionsDeBanqueEndpointTest(
     @Autowired private val users: UserRepository,
     @Autowired private val passwordEncoder: PasswordEncoder,
     @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val clients: com.nimba.client.ClientModuleApi,
     @Value("\${local.server.port}") private val port: Int,
 ) {
     private fun analystId(): UUID = requireNotNull(seedDriAnalyst(users, passwordEncoder, "conditions@banque.test").id)
@@ -58,7 +59,10 @@ class UpdateConditionsDeBanqueEndpointTest(
 
     @Test
     fun `captures the conditions de banque and returns them on the case`() {
-        val created = creditCases.createCase(CreateCreditCaseCommand("Client Conditions", ProductType.MC2_MUFFA, "GNF", analystId()))
+        val created =
+            creditCases.createCase(
+                CreateCreditCaseCommand(com.nimba.seedClient(clients, "Client Conditions"), ProductType.MC2_MUFFA, "GNF", analystId()),
+            )
         val client = authenticatedClient()
 
         val response =
@@ -85,7 +89,10 @@ class UpdateConditionsDeBanqueEndpointTest(
 
     @Test
     fun `a new case starts with no conditions de banque captured`() {
-        val created = creditCases.createCase(CreateCreditCaseCommand("Client Vierge", ProductType.MC2_MUFFA, "GNF", analystId()))
+        val created =
+            creditCases.createCase(
+                CreateCreditCaseCommand(com.nimba.seedClient(clients, "Client Vierge"), ProductType.MC2_MUFFA, "GNF", analystId()),
+            )
         val client = authenticatedClient()
 
         val response =
@@ -99,7 +106,10 @@ class UpdateConditionsDeBanqueEndpointTest(
 
     @Test
     fun `rejects an invalid percentage`() {
-        val created = creditCases.createCase(CreateCreditCaseCommand("Client Invalide", ProductType.MC2_MUFFA, "GNF", analystId()))
+        val created =
+            creditCases.createCase(
+                CreateCreditCaseCommand(com.nimba.seedClient(clients, "Client Invalide"), ProductType.MC2_MUFFA, "GNF", analystId()),
+            )
         val client = authenticatedClient()
 
         val response = put(client, created.id.toString(), """{"tauxInteretPct":12345.6789}""")

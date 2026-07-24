@@ -40,6 +40,7 @@ class FmpModuleTest(
     @Autowired private val fmps: FmpModuleApi,
     @Autowired private val pvs: PvModuleApi,
     @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val clients: com.nimba.client.ClientModuleApi,
     @Autowired private val analysisSheets: AnalysisSheetModuleApi,
     @Autowired private val guarantees: GuaranteeModuleApi,
     @Autowired private val schedules: AmortizationScheduleRepository,
@@ -63,7 +64,13 @@ class FmpModuleTest(
         val caseId =
             creditCases
                 .createCase(
-                    CreateCreditCaseCommand("Client FMP", ProductType.LEASING, "GNF", dri, contractType = ContractType.AVEC_CONTRAT),
+                    CreateCreditCaseCommand(
+                        com.nimba.seedClient(clients, "Client FMP"),
+                        ProductType.LEASING,
+                        "GNF",
+                        dri,
+                        contractType = ContractType.AVEC_CONTRAT,
+                    ),
                 ).id
         val line =
             AmortizationScheduleLine(
@@ -123,7 +130,13 @@ class FmpModuleTest(
         val caseId =
             creditCases
                 .createCase(
-                    CreateCreditCaseCommand("Trop tôt", ProductType.LEASING, "GNF", dri, contractType = ContractType.AVEC_CONTRAT),
+                    CreateCreditCaseCommand(
+                        com.nimba.seedClient(clients, "Trop tôt"),
+                        ProductType.LEASING,
+                        "GNF",
+                        dri,
+                        contractType = ContractType.AVEC_CONTRAT,
+                    ),
                 ).id
 
         assertFailsWith<ResponseStatusException> {

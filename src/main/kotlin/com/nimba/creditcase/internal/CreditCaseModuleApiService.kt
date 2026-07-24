@@ -1,5 +1,7 @@
 package com.nimba.creditcase.internal
 
+import com.nimba.client.ClientInfo
+import com.nimba.client.ClientModuleApi
 import com.nimba.creditcase.CaseTypePolicies
 import com.nimba.creditcase.ClientIdentityInfo
 import com.nimba.creditcase.ConditionsDeBanqueInfo
@@ -11,7 +13,6 @@ import com.nimba.creditcase.CreditCaseInfo
 import com.nimba.creditcase.CreditCaseModuleApi
 import com.nimba.creditcase.CreditCaseStatus
 import com.nimba.creditcase.ProductType
-import com.nimba.creditcase.UpdateClientIdentityCommand
 import com.nimba.creditcase.UpdateConditionsDeBanqueCommand
 import com.nimba.creditcase.UpdateCreditCaseCommand
 import com.nimba.identity.IdentityModuleApi
@@ -31,6 +32,7 @@ class CreditCaseModuleApiService(
     private val creditCases: CreditCaseRepository,
     private val numberGenerator: CreditCaseNumberGenerator,
     private val identity: IdentityModuleApi,
+    private val clients: ClientModuleApi,
     private val events: ApplicationEventPublisher,
 ) : CreditCaseModuleApi {
     @Transactional
@@ -39,13 +41,15 @@ class CreditCaseModuleApiService(
         // to a real user through the identity module's API (no direct entity access).
         identity.findUser(command.createdBy)
             ?: throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "Analyste inconnu")
+        // The dossier is for an existing client — the single source of client identity.
+        val client = resolveClient(command.clientId)
         val contractType = requireValidContractType(command.productType, command.contractType)
 
         val saved =
             creditCases.save(
                 CreditCase(
                     caseNumber = numberGenerator.nextCaseNumber(),
-                    clientName = command.clientName,
+                    clientId = client.id,
                     productType = command.productType,
                     contractType = contractType,
                     currency = command.currency,
@@ -56,7 +60,7 @@ class CreditCaseModuleApiService(
         // Let the workflow module initialise the dossier's lifecycle in the same
         // transaction; the creditcase module stays unaware of who consumes this.
         events.publishEvent(CreditCaseCreated(requireNotNull(saved.id)))
-        return saved.toCreditCaseInfo()
+        return saved.toCreditCaseInfo(client)
     }
 
     @Transactional
@@ -65,24 +69,14 @@ class CreditCaseModuleApiService(
         command: UpdateCreditCaseCommand,
     ): CreditCaseInfo {
         val case = creditCases.getOrThrow(id, "Dossier introuvable")
-        case.clientName = command.clientName
+        val client = resolveClient(command.clientId)
+        case.clientId = client.id
         case.productType = command.productType
         case.contractType = requireValidContractType(command.productType, command.contractType)
         case.currency = command.currency
         case.accountNumber = command.accountNumber?.takeIf { it.isNotBlank() }
         case.updatedAt = Instant.now()
-        return case.toCreditCaseInfo()
-    }
-
-    @Transactional
-    override fun updateIdentity(
-        id: UUID,
-        command: UpdateClientIdentityCommand,
-    ): CreditCaseInfo {
-        val case = creditCases.getOrThrow(id, "Dossier introuvable")
-        case.clientIdentity = command.toClientIdentity()
-        case.updatedAt = Instant.now()
-        return case.toCreditCaseInfo()
+        return case.toCreditCaseInfo(client)
     }
 
     @Transactional
@@ -93,25 +87,27 @@ class CreditCaseModuleApiService(
         val case = creditCases.getOrThrow(id, "Dossier introuvable")
         case.conditionsDeBanque = command.toConditionsDeBanque()
         case.updatedAt = Instant.now()
-        return case.toCreditCaseInfo()
+        return infoOf(case)
     }
 
     @Transactional(readOnly = true)
     override fun list(
         pageable: Pageable,
         archived: Boolean?,
-    ): Page<CreditCaseInfo> =
-        when (archived) {
-            null -> creditCases.findAll(pageable)
-            true -> creditCases.findByArchivedAtIsNotNull(pageable)
-            false -> creditCases.findByArchivedAtIsNull(pageable)
-        }.map { it.toCreditCaseInfo() }
+        clientId: UUID?,
+        productType: ProductType?,
+    ): Page<CreditCaseInfo> {
+        val page = creditCases.findAll(creditCaseFilter(archived, clientId, productType), pageable)
+        // One query for every linked client on the page rather than one per row.
+        val clientsById = clients.findByIds(page.content.map { it.clientId }.toSet()).associateBy { it.id }
+        return page.map { it.toCreditCaseInfo(clientsById[it.clientId]) }
+    }
 
     @Transactional(readOnly = true)
-    override fun findById(id: UUID): CreditCaseInfo? = creditCases.findById(id).map { it.toCreditCaseInfo() }.orElse(null)
+    override fun findById(id: UUID): CreditCaseInfo? = creditCases.findById(id).map { infoOf(it) }.orElse(null)
 
     @Transactional(readOnly = true)
-    override fun findByCaseNumber(caseNumber: String): CreditCaseInfo? = creditCases.findByCaseNumber(caseNumber)?.toCreditCaseInfo()
+    override fun findByCaseNumber(caseNumber: String): CreditCaseInfo? = creditCases.findByCaseNumber(caseNumber)?.let { infoOf(it) }
 
     @Transactional
     override fun markTradesGenerated(creditCaseId: UUID) {
@@ -128,7 +124,7 @@ class CreditCaseModuleApiService(
             case.archivedAt = Instant.now()
             case.updatedAt = Instant.now()
         }
-        return case.toCreditCaseInfo()
+        return infoOf(case)
     }
 
     @Transactional
@@ -138,7 +134,7 @@ class CreditCaseModuleApiService(
             case.archivedAt = null
             case.updatedAt = Instant.now()
         }
-        return case.toCreditCaseInfo()
+        return infoOf(case)
     }
 
     @Transactional
@@ -149,6 +145,13 @@ class CreditCaseModuleApiService(
         events.publishEvent(CreditCaseDeleted(requireNotNull(case.id)))
         creditCases.delete(case)
     }
+
+    /** Resolves a case's linked client and maps it to the public view. */
+    private fun infoOf(case: CreditCase): CreditCaseInfo = case.toCreditCaseInfo(resolveClient(case.clientId))
+
+    /** Resolves a client or fails with the client module's canonical 404. */
+    private fun resolveClient(id: UUID): ClientInfo =
+        clients.findById(id) ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Client introuvable")
 }
 
 /**
@@ -172,11 +175,17 @@ private fun requireValidContractType(
     throw ResponseStatusException(HttpStatus.BAD_REQUEST, message)
 }
 
-internal fun CreditCase.toCreditCaseInfo(): CreditCaseInfo =
+/**
+ * Maps a case to its public view, given its linked [client] (the single source of
+ * client identity). [client] is nullable only to keep a paged list resilient if a
+ * referenced client is missing; single reads always pass a resolved client.
+ */
+internal fun CreditCase.toCreditCaseInfo(client: ClientInfo?): CreditCaseInfo =
     CreditCaseInfo(
         id = requireNotNull(id),
         caseNumber = caseNumber,
-        clientName = clientName,
+        clientId = clientId,
+        clientName = client?.raisonSociale ?: "",
         productType = productType,
         contractType = contractType,
         currency = currency,
@@ -185,11 +194,12 @@ internal fun CreditCase.toCreditCaseInfo(): CreditCaseInfo =
         createdAt = createdAt,
         accountNumber = accountNumber,
         archivedAt = archivedAt,
-        clientIdentity = identityOrEmpty().toInfo(),
+        clientIdentity = client?.toIdentityInfo() ?: ClientIdentityInfo(),
         conditionsDeBanque = conditionsOrEmpty().toInfo(),
     )
 
-private fun ClientIdentity.toInfo(): ClientIdentityInfo =
+/** The client's descriptive fields, as the FA/PV/FMP consume them (a subset of the client record). */
+private fun ClientInfo.toIdentityInfo(): ClientIdentityInfo =
     ClientIdentityInfo(
         formeJuridique = formeJuridique,
         dateCreation = dateCreation,
@@ -204,23 +214,6 @@ private fun ClientIdentity.toInfo(): ClientIdentityInfo =
         analyste = analyste,
         cotationPrecedente = cotationPrecedente,
         cotationActuelle = cotationActuelle,
-    )
-
-private fun UpdateClientIdentityCommand.toClientIdentity(): ClientIdentity =
-    ClientIdentity(
-        formeJuridique = formeJuridique?.takeIf { it.isNotBlank() },
-        dateCreation = dateCreation,
-        adressePhysique = adressePhysique?.takeIf { it.isNotBlank() },
-        activiteDeBase = activiteDeBase?.takeIf { it.isNotBlank() },
-        codeNif = codeNif?.takeIf { it.isNotBlank() },
-        principalDirigeant = principalDirigeant?.takeIf { it.isNotBlank() },
-        dateEntreeRelation = dateEntreeRelation,
-        dateDerniereVisite = dateDerniereVisite,
-        agence = agence?.takeIf { it.isNotBlank() },
-        gestionnaire = gestionnaire?.takeIf { it.isNotBlank() },
-        analyste = analyste?.takeIf { it.isNotBlank() },
-        cotationPrecedente = cotationPrecedente?.takeIf { it.isNotBlank() },
-        cotationActuelle = cotationActuelle?.takeIf { it.isNotBlank() },
     )
 
 private fun ConditionsDeBanque.toInfo(): ConditionsDeBanqueInfo =

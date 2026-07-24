@@ -6,7 +6,6 @@ import com.nimba.creditcase.ContractType
 import com.nimba.creditcase.CreditCaseInfo
 import com.nimba.creditcase.CreditCaseStatus
 import com.nimba.creditcase.ProductType
-import com.nimba.creditcase.UpdateClientIdentityCommand
 import com.nimba.creditcase.UpdateConditionsDeBanqueCommand
 import jakarta.validation.constraints.Digits
 import jakarta.validation.constraints.NotBlank
@@ -15,7 +14,6 @@ import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
 import java.math.BigDecimal
 import java.time.Instant
-import java.time.LocalDate
 import java.util.UUID
 
 /**
@@ -25,9 +23,8 @@ import java.util.UUID
  * stamps them on create and refuses to touch them on update.
  */
 data class CreditCaseWriteRequest(
-    @field:NotBlank
-    @field:Size(min = 1, max = 200, message = "Le nom du client doit faire entre 1 et 200 caractères")
-    val clientName: String,
+    @field:NotNull(message = "Le client est requis")
+    val clientId: UUID,
     @field:NotNull
     val productType: ProductType,
     /** Required when [productType] is LEASING; must be omitted otherwise (service-validated). */
@@ -42,6 +39,7 @@ data class CreditCaseWriteRequest(
 data class CreditCaseResponse(
     val id: UUID,
     val caseNumber: String,
+    val clientId: UUID,
     val clientName: String,
     val productType: ProductType,
     val contractType: ContractType?,
@@ -58,6 +56,7 @@ internal fun CreditCaseInfo.toResponse(): CreditCaseResponse =
     CreditCaseResponse(
         id = id,
         caseNumber = caseNumber,
+        clientId = clientId,
         clientName = clientName,
         productType = productType,
         contractType = contractType,
@@ -68,55 +67,6 @@ internal fun CreditCaseInfo.toResponse(): CreditCaseResponse =
         archivedAt = archivedAt,
         clientIdentity = clientIdentity,
         conditionsDeBanque = conditionsDeBanque,
-    )
-
-/**
- * Write payload for a case's client-identity details — a separate concern from
- * [CreditCaseWriteRequest] (identity is optional supplementary detail added
- * incrementally, not part of the required create/edit fields). Every field is
- * optional; blanks are treated as "not captured".
- */
-data class ClientIdentityRequest(
-    @field:Size(max = 100, message = "100 caractères maximum")
-    val formeJuridique: String? = null,
-    val dateCreation: LocalDate? = null,
-    @field:Size(max = 300, message = "300 caractères maximum")
-    val adressePhysique: String? = null,
-    @field:Size(max = 300, message = "300 caractères maximum")
-    val activiteDeBase: String? = null,
-    @field:Size(max = 50, message = "50 caractères maximum")
-    val codeNif: String? = null,
-    @field:Size(max = 200, message = "200 caractères maximum")
-    val principalDirigeant: String? = null,
-    val dateEntreeRelation: LocalDate? = null,
-    val dateDerniereVisite: LocalDate? = null,
-    @field:Size(max = 100, message = "100 caractères maximum")
-    val agence: String? = null,
-    @field:Size(max = 200, message = "200 caractères maximum")
-    val gestionnaire: String? = null,
-    @field:Size(max = 200, message = "200 caractères maximum")
-    val analyste: String? = null,
-    @field:Size(max = 20, message = "20 caractères maximum")
-    val cotationPrecedente: String? = null,
-    @field:Size(max = 20, message = "20 caractères maximum")
-    val cotationActuelle: String? = null,
-)
-
-internal fun ClientIdentityRequest.toCommand(): UpdateClientIdentityCommand =
-    UpdateClientIdentityCommand(
-        formeJuridique = formeJuridique,
-        dateCreation = dateCreation,
-        adressePhysique = adressePhysique,
-        activiteDeBase = activiteDeBase,
-        codeNif = codeNif,
-        principalDirigeant = principalDirigeant,
-        dateEntreeRelation = dateEntreeRelation,
-        dateDerniereVisite = dateDerniereVisite,
-        agence = agence,
-        gestionnaire = gestionnaire,
-        analyste = analyste,
-        cotationPrecedente = cotationPrecedente,
-        cotationActuelle = cotationActuelle,
     )
 
 /**
@@ -155,6 +105,7 @@ internal fun ConditionsDeBanqueRequest.toCommand(): UpdateConditionsDeBanqueComm
 data class CreditCaseSummaryResponse(
     val id: UUID,
     val caseNumber: String,
+    val clientId: UUID,
     val clientName: String,
     val productType: ProductType,
     val contractType: ContractType?,
@@ -167,6 +118,7 @@ internal fun CreditCaseInfo.toSummaryResponse(): CreditCaseSummaryResponse =
     CreditCaseSummaryResponse(
         id = id,
         caseNumber = caseNumber,
+        clientId = clientId,
         clientName = clientName,
         productType = productType,
         contractType = contractType,

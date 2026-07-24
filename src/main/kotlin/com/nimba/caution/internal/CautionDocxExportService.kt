@@ -119,7 +119,9 @@ class CautionDocxExportService(
     private fun liveSnapshot(clientId: UUID): CautionClientSnapshotInfo {
         val client = clients.getOrThrow(clientId)
         return CautionClientSnapshotInfo(
-            matricule = client.matricule,
+            // A caution can only exist for a client that had a matricule at issuance
+            // (enforced on create); orEmpty guards the type only.
+            matricule = client.matricule.orEmpty(),
             raisonSociale = client.raisonSociale,
             sigle = client.sigle,
             adressePhysique = client.adressePhysique,

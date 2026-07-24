@@ -172,18 +172,21 @@ class SecurityConfig(
                 // fall through to the GET rule above, already open to every reviewer.
                 // Matched before the DRI-only rule for the same reason as workflow.
                 it.requestMatchers("$base/credit-cases/*/pv/**", "$base/credit-cases/*/fmp/**").hasRole("DCM_MEMBER")
-                // The client registry and the Caution module (SMS, ACF...) back
-                // DCM's tender-guarantee business, distinct from the DRI's dossier
-                // surface entirely — DCM-only, no other direction reads or writes.
-                // The critical, irreversible steps (finalizing a document into an
-                // official record, deleting one, closing a dossier) are reserved to
-                // a DCM manager; the role hierarchy lets a manager pass the member
-                // rules that follow. Matched before the member catch-all.
+                // The Caution module (SMS, ACF...) backs DCM's tender-guarantee
+                // business — DCM-only. The critical, irreversible steps (finalizing a
+                // document into an official record, deleting one, closing a dossier)
+                // are reserved to a DCM manager; the role hierarchy lets a manager pass
+                // the member rules that follow. Matched before the member catch-all.
                 it.requestMatchers(HttpMethod.POST, "$base/cautions/*/finalize").hasRole("DCM_MANAGER")
                 it.requestMatchers(HttpMethod.DELETE, "$base/cautions/*").hasRole("DCM_MANAGER")
                 it.requestMatchers(HttpMethod.POST, "$base/caution-dossiers/*/proroge").hasRole("DCM_MANAGER")
                 it.requestMatchers(HttpMethod.DELETE, "$base/caution-dossiers/*").hasRole("DCM_MANAGER")
-                it.requestMatchers("$base/clients/**", "$base/cautions/**", "$base/caution-dossiers/**").hasRole("DCM_MEMBER")
+                it.requestMatchers("$base/cautions/**", "$base/caution-dossiers/**").hasRole("DCM_MEMBER")
+                // The client registry is the single source of client identity, shared
+                // by both the DRI's credit dossiers and the DCM's cautions, so both
+                // directions read and create clients (a DRI opens a leasing dossier
+                // against a client; a DCM issues a caution for one).
+                it.requestMatchers("$base/clients/**").hasAnyRole("DRI_MEMBER", "DCM_MEMBER")
                 // Constituting the dossier (create/update, TA upload, FA edit/publish,
                 // trade generation) belongs to the DRI direction. The role hierarchy
                 // lets a DRI manager pass this check.

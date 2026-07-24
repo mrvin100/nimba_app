@@ -1,8 +1,10 @@
 package com.nimba.creditcase
 
 import com.nimba.TestcontainersConfiguration
+import com.nimba.client.ClientModuleApi
 import com.nimba.identity.internal.User
 import com.nimba.identity.internal.UserRepository
+import com.nimba.seedClient
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -18,6 +20,7 @@ import kotlin.test.assertTrue
 @SpringBootTest
 class CreditCaseModuleTest(
     @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val clients: ClientModuleApi,
     @Autowired private val users: UserRepository,
 ) {
     private fun seedAnalyst(): UUID {
@@ -38,11 +41,23 @@ class CreditCaseModuleTest(
 
         val first =
             creditCases.createCase(
-                CreateCreditCaseCommand("Client A", ProductType.LEASING, "GNF", analyst, contractType = ContractType.AVEC_CONTRAT),
+                CreateCreditCaseCommand(
+                    seedClient(clients, "Client A"),
+                    ProductType.LEASING,
+                    "GNF",
+                    analyst,
+                    contractType = ContractType.AVEC_CONTRAT,
+                ),
             )
         val second =
             creditCases.createCase(
-                CreateCreditCaseCommand("Client B", ProductType.LEASING, "GNF", analyst, contractType = ContractType.AVEC_CONTRAT),
+                CreateCreditCaseCommand(
+                    seedClient(clients, "Client B"),
+                    ProductType.LEASING,
+                    "GNF",
+                    analyst,
+                    contractType = ContractType.AVEC_CONTRAT,
+                ),
             )
 
         assertTrue(first.caseNumber.matches(Regex("""DOS-\d{4}-\d{4}""")), "unexpected format: ${first.caseNumber}")
@@ -55,7 +70,13 @@ class CreditCaseModuleTest(
         val analyst = seedAnalyst()
         val created =
             creditCases.createCase(
-                CreateCreditCaseCommand("Client Résolu", ProductType.LEASING, "GNF", analyst, contractType = ContractType.AVEC_CONTRAT),
+                CreateCreditCaseCommand(
+                    seedClient(clients, "Client Résolu"),
+                    ProductType.LEASING,
+                    "GNF",
+                    analyst,
+                    contractType = ContractType.AVEC_CONTRAT,
+                ),
             )
 
         val byId = creditCases.findById(created.id)
@@ -72,7 +93,7 @@ class CreditCaseModuleTest(
     fun `creation is rejected when the creator is not a known analyst`() {
         assertFailsWith<ResponseStatusException> {
             creditCases.createCase(
-                CreateCreditCaseCommand("Client Orphelin", ProductType.LEASING, "GNF", UUID.randomUUID()),
+                CreateCreditCaseCommand(UUID.randomUUID(), ProductType.LEASING, "GNF", UUID.randomUUID()),
             )
         }
     }
