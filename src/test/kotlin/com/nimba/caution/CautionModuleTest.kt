@@ -50,10 +50,15 @@ class CautionModuleTest(
             "beneficiaire" to "ELECTRICITE DE GUINEE EDG-SA",
             "referenceAppelOffres" to "AAONO N°: 001/EDG-SA/DAAL/PRMP/2026",
             "objetMarche" to "Travaux de réfection des bâtiments du site de Garafiri",
+            "devise" to "GNF",
             "montant" to "238756476",
             "dateEmission" to "2026-02-11",
             "dateOffre" to "2026-02-13",
             "dateExpiration" to "2026-05-13",
+            "signataire1Nom" to "QUENTIN DETCHENOU",
+            "signataire1Titre" to "Directeur Crédit Marketing",
+            "signataire2Nom" to "FANNY SOUMAH",
+            "signataire2Titre" to "Directrice Générale Adjointe",
         )
 
     @Test
@@ -88,8 +93,13 @@ class CautionModuleTest(
                 "beneficiaire" to "ELECTRICITE DE GUINEE EDG SA",
                 "referenceAppelOffres" to "007/EDG-SA/DAAL/DPSM/2025",
                 "objetMarche" to "Travaux de réfection des bâtiments de GARAFIRI",
+                "devise" to "GNF",
                 "montant" to "2828096140",
                 "dateEmission" to "2026-02-19",
+                "signataire1Nom" to "QUENTIN DETCHENOU",
+                "signataire1Titre" to "Directeur Crédit Marketing",
+                "signataire2Nom" to "FANNY SOUMAH",
+                "signataire2Titre" to "Directrice Générale Adjointe",
             )
 
         val sms = cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm))

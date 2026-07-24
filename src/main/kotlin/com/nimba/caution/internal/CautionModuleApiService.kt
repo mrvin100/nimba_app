@@ -38,7 +38,12 @@ class CautionModuleApiService(
                 Caution(
                     clientId = client.id,
                     documentType = command.documentType,
-                    referenceNumber = numberGenerator.nextReferenceNumber(client.matricule, command.documentType),
+                    referenceNumber =
+                        numberGenerator.nextReferenceNumber(
+                            client.matricule,
+                            command.documentType,
+                            command.startingReferenceSequence,
+                        ),
                     createdBy = command.createdBy,
                 ).apply {
                     contentJson = objectMapper.writeValueAsString(command.content)
@@ -90,6 +95,9 @@ class CautionModuleApiService(
         status: CautionStatus?,
     ): Page<CautionInfo> = cautions.search(clientId, documentType, status, pageable).map { it.toInfo(objectMapper) }
 
+    @Transactional(readOnly = true)
+    override fun referenceSequenceInitialized(): Boolean = numberGenerator.isInitialized()
+
     @Transactional
     override fun delete(id: UUID) {
         val caution = cautions.findById(id).orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Caution introuvable") }
@@ -117,7 +125,7 @@ class CautionModuleApiService(
         val missing =
             CautionFieldRegistry
                 .allFieldsFor(documentType)
-                .filter { content[it.key].isNullOrBlank() }
+                .filter { !it.optional && content[it.key].isNullOrBlank() }
         if (missing.isNotEmpty()) {
             throw ResponseStatusException(
                 HttpStatus.BAD_REQUEST,

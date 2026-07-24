@@ -16,6 +16,20 @@ fun BigDecimal.toFrenchWords(): String {
     return raw.split(Regex("[- ]+")).joinToString(" ") { it.replaceFirstChar(Char::uppercaseChar) }
 }
 
+/** The currency's name in French, spelled the same Pascal-cased way as the amount itself. */
+private val CURRENCY_NAMES =
+    mapOf(
+        "GNF" to "Francs Guinéens",
+        "USD" to "Dollars Américains",
+        "EUR" to "Euros",
+    )
+
+/** The amount's name, or the code itself if a currency isn't in the known list (never blocks generation on an unexpected code). */
+fun currencyNameInWords(currencyCode: String): String = CURRENCY_NAMES[currencyCode.uppercase()] ?: currencyCode
+
+/** "(Deux Cent ... Seize Francs Guinéens)" — the amount and its currency, both spelled out, exactly as printed on the reference templates. */
+fun BigDecimal.amountInWords(currencyCode: String): String = "${toFrenchWords()} ${currencyNameInWords(currencyCode)}"
+
 private val ONES =
     arrayOf(
         "zéro",
