@@ -94,13 +94,10 @@ class CreditCaseModuleApiService(
     override fun list(
         pageable: Pageable,
         archived: Boolean?,
+        clientId: UUID?,
+        productType: ProductType?,
     ): Page<CreditCaseInfo> {
-        val page =
-            when (archived) {
-                null -> creditCases.findAll(pageable)
-                true -> creditCases.findByArchivedAtIsNotNull(pageable)
-                false -> creditCases.findByArchivedAtIsNull(pageable)
-            }
+        val page = creditCases.findAll(creditCaseFilter(archived, clientId, productType), pageable)
         // One query for every linked client on the page rather than one per row.
         val clientsById = clients.findByIds(page.content.map { it.clientId }.toSet()).associateBy { it.id }
         return page.map { it.toCreditCaseInfo(clientsById[it.clientId]) }

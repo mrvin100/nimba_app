@@ -3,6 +3,7 @@ package com.nimba.creditcase.internal
 import com.nimba.creditcase.CreateCreditCaseCommand
 import com.nimba.creditcase.CreditCaseInfo
 import com.nimba.creditcase.CreditCaseModuleApi
+import com.nimba.creditcase.ProductType
 import com.nimba.creditcase.UpdateCreditCaseCommand
 import com.nimba.creditcase.getOrThrow
 import com.nimba.shared.CurrentUser
@@ -81,7 +82,10 @@ class CreditCaseController(
     fun list(
         @PageableDefault(size = 20, sort = ["createdAt"], direction = Sort.Direction.DESC) pageable: Pageable,
         @RequestParam(required = false) archived: Boolean?,
-    ): PageResponse<CreditCaseSummaryResponse> = creditCases.list(pageable, archived).toPageResponse(CreditCaseInfo::toSummaryResponse)
+        @RequestParam(required = false) clientId: UUID?,
+        @RequestParam(required = false) productType: ProductType?,
+    ): PageResponse<CreditCaseSummaryResponse> =
+        creditCases.list(pageable, archived, clientId, productType).toPageResponse(CreditCaseInfo::toSummaryResponse)
 
     // The three actions below are administrative acts on a dossier (NIMBA-45),
     // deliberately outside the DRI business flow — hence ROLE_ADMIN on top of the

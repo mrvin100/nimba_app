@@ -16,12 +16,16 @@ interface CreditCaseModuleApi {
     fun createCase(command: CreateCreditCaseCommand): CreditCaseInfo
 
     /**
-     * Pages through the cases (the dashboard list). [archived] narrows to archived
-     * (true) or active (false) cases; null returns everything.
+     * Pages through the cases (the dashboard list and per-registre / per-client
+     * views). [archived] narrows to archived (true) or active (false) cases (null =
+     * everything); [clientId] limits to one client's dossiers (the client 360 view);
+     * [productType] limits to one product family's registre.
      */
     fun list(
         pageable: Pageable,
         archived: Boolean? = null,
+        clientId: UUID? = null,
+        productType: ProductType? = null,
     ): Page<CreditCaseInfo>
 
     /** Updates a case's general information (client, product, currency); 404 if unknown. */
