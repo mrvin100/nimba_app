@@ -172,10 +172,10 @@ class SecurityConfig(
                 // fall through to the GET rule above, already open to every reviewer.
                 // Matched before the DRI-only rule for the same reason as workflow.
                 it.requestMatchers("$base/credit-cases/*/pv/**", "$base/credit-cases/*/fmp/**").hasRole("DCM_MEMBER")
-                // The client registry backs DCM's tender-guarantee business (the
-                // Caution module), distinct from the DRI's dossier surface entirely
-                // — DCM-only, no other direction reads or writes.
-                it.requestMatchers("$base/clients/**").hasRole("DCM_MEMBER")
+                // The client registry and the Caution module (SMS, ACF...) back
+                // DCM's tender-guarantee business, distinct from the DRI's dossier
+                // surface entirely — DCM-only, no other direction reads or writes.
+                it.requestMatchers("$base/clients/**", "$base/cautions/**").hasRole("DCM_MEMBER")
                 // Constituting the dossier (create/update, TA upload, FA edit/publish,
                 // trade generation) belongs to the DRI direction. The role hierarchy
                 // lets a DRI manager pass this check.
