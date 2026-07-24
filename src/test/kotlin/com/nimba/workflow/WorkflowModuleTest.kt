@@ -34,6 +34,7 @@ import kotlin.test.assertTrue
 class WorkflowModuleTest(
     @Autowired private val workflow: WorkflowService,
     @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val clients: com.nimba.client.ClientModuleApi,
     @Autowired private val analysisSheets: AnalysisSheetModuleApi,
     @Autowired private val schedules: AmortizationScheduleRepository,
     @Autowired private val users: UserRepository,
@@ -50,7 +51,13 @@ class WorkflowModuleTest(
         val caseId =
             creditCases
                 .createCase(
-                    CreateCreditCaseCommand("Client Workflow", ProductType.LEASING, "GNF", dri, contractType = ContractType.AVEC_CONTRAT),
+                    CreateCreditCaseCommand(
+                        com.nimba.seedClient(clients, "Client Workflow"),
+                        ProductType.LEASING,
+                        "GNF",
+                        dri,
+                        contractType = ContractType.AVEC_CONTRAT,
+                    ),
                 ).id
         val line =
             AmortizationScheduleLine(
@@ -81,7 +88,13 @@ class WorkflowModuleTest(
         val caseId =
             creditCases
                 .createCase(
-                    CreateCreditCaseCommand("Init", ProductType.LEASING, "GNF", dri, contractType = ContractType.SANS_CONTRAT),
+                    CreateCreditCaseCommand(
+                        com.nimba.seedClient(clients, "Init"),
+                        ProductType.LEASING,
+                        "GNF",
+                        dri,
+                        contractType = ContractType.SANS_CONTRAT,
+                    ),
                 ).id
 
         assertEquals(WorkflowStatus.BROUILLON, workflow.state(caseId, dri).status)
@@ -159,7 +172,13 @@ class WorkflowModuleTest(
         val caseId =
             creditCases
                 .createCase(
-                    CreateCreditCaseCommand("Sans FA", ProductType.LEASING, "GNF", dri, contractType = ContractType.AVEC_CONTRAT),
+                    CreateCreditCaseCommand(
+                        com.nimba.seedClient(clients, "Sans FA"),
+                        ProductType.LEASING,
+                        "GNF",
+                        dri,
+                        contractType = ContractType.AVEC_CONTRAT,
+                    ),
                 ).id
 
         assertFailsWith<ResponseStatusException> { workflow.act(caseId, dri, WorkflowAction.SUBMIT, null) }

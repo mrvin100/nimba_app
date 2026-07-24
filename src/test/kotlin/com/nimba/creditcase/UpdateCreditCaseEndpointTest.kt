@@ -25,6 +25,7 @@ class UpdateCreditCaseEndpointTest(
     @Autowired private val users: UserRepository,
     @Autowired private val passwordEncoder: PasswordEncoder,
     @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val clients: com.nimba.client.ClientModuleApi,
     @Value("\${local.server.port}") private val port: Int,
 ) {
     private fun analystId(): UUID = requireNotNull(seedDriAnalyst(users, passwordEncoder, "updatecase@banque.test").id)
@@ -61,15 +62,22 @@ class UpdateCreditCaseEndpointTest(
     fun `updates the case general information, keeping its number`() {
         val created =
             creditCases.createCase(
-                CreateCreditCaseCommand("Ancien Client", ProductType.LEASING, "GNF", analystId(), contractType = ContractType.AVEC_CONTRAT),
+                CreateCreditCaseCommand(
+                    com.nimba.seedClient(clients, "Ancien Client"),
+                    ProductType.LEASING,
+                    "GNF",
+                    analystId(),
+                    contractType = ContractType.AVEC_CONTRAT,
+                ),
             )
         val client = authenticatedClient()
+        val newClientId = com.nimba.seedClient(clients, "Nouveau Client")
 
         val response =
             put(
                 client,
                 created.id.toString(),
-                """{"clientName":"Nouveau Client","productType":"LEASING","contractType":"AVEC_CONTRAT","currency":"USD"}""",
+                """{"clientId":"$newClientId","productType":"LEASING","contractType":"AVEC_CONTRAT","currency":"USD"}""",
             )
 
         assertEquals(200, response.statusCode(), response.body())
@@ -85,7 +93,7 @@ class UpdateCreditCaseEndpointTest(
             put(
                 authenticatedClient(),
                 UUID.randomUUID().toString(),
-                """{"clientName":"X","productType":"LEASING","currency":"GNF"}""",
+                """{"clientId":"${UUID.randomUUID()}","productType":"LEASING","currency":"GNF"}""",
             )
         assertEquals(404, response.statusCode())
     }
@@ -94,11 +102,21 @@ class UpdateCreditCaseEndpointTest(
     fun `rejects an invalid currency`() {
         val created =
             creditCases.createCase(
-                CreateCreditCaseCommand("Client", ProductType.LEASING, "GNF", analystId(), contractType = ContractType.AVEC_CONTRAT),
+                CreateCreditCaseCommand(
+                    com.nimba.seedClient(clients, "Client"),
+                    ProductType.LEASING,
+                    "GNF",
+                    analystId(),
+                    contractType = ContractType.AVEC_CONTRAT,
+                ),
             )
 
         val response =
-            put(authenticatedClient(), created.id.toString(), """{"clientName":"Client","productType":"LEASING","currency":"gnf"}""")
+            put(
+                authenticatedClient(),
+                created.id.toString(),
+                """{"clientId":"${UUID.randomUUID()}","productType":"LEASING","currency":"gnf"}""",
+            )
 
         assertEquals(400, response.statusCode(), response.body())
     }
@@ -106,7 +124,8 @@ class UpdateCreditCaseEndpointTest(
     @Test
     fun `rejects without an authenticated session`() {
         val anonymous = HttpClient.newBuilder().cookieHandler(CookieManager()).build()
-        val response = put(anonymous, UUID.randomUUID().toString(), """{"clientName":"X","productType":"LEASING","currency":"GNF"}""")
+        val response =
+            put(anonymous, UUID.randomUUID().toString(), """{"clientId":"${UUID.randomUUID()}","productType":"LEASING","currency":"GNF"}""")
         assertEquals(401, response.statusCode())
     }
 }

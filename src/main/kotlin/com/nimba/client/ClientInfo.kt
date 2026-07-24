@@ -13,7 +13,9 @@ import java.util.UUID
  */
 data class ClientInfo(
     val id: UUID,
-    val matricule: String,
+    val type: ClientType,
+    /** The bank's internal client code; null until captured (see [CreateClientCommand]). */
+    val matricule: String?,
     val raisonSociale: String,
     val sigle: String?,
     val formeJuridique: String?,

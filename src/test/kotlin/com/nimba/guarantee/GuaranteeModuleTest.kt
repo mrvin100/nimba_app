@@ -23,6 +23,7 @@ import kotlin.test.assertTrue
 class GuaranteeModuleTest(
     @Autowired private val guarantees: GuaranteeModuleApi,
     @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val clients: com.nimba.client.ClientModuleApi,
     @Autowired private val users: UserRepository,
 ) {
     private fun analystId(): UUID =
@@ -36,7 +37,13 @@ class GuaranteeModuleTest(
     private fun caseId(analyst: UUID): UUID =
         creditCases
             .createCase(
-                CreateCreditCaseCommand("Client Garanties", ProductType.LEASING, "GNF", analyst, contractType = ContractType.AVEC_CONTRAT),
+                CreateCreditCaseCommand(
+                    com.nimba.seedClient(clients, "Client Garanties"),
+                    ProductType.LEASING,
+                    "GNF",
+                    analyst,
+                    contractType = ContractType.AVEC_CONTRAT,
+                ),
             ).id
 
     @Test

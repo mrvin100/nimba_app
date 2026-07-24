@@ -40,6 +40,7 @@ class ReviewModuleTest(
     @Autowired private val reviewService: ReviewService,
     @Autowired private val workflow: WorkflowModuleApi,
     @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val clients: com.nimba.client.ClientModuleApi,
     @Autowired private val analysisSheets: AnalysisSheetModuleApi,
     @Autowired private val schedules: AmortizationScheduleRepository,
     @Autowired private val users: UserRepository,
@@ -53,7 +54,13 @@ class ReviewModuleTest(
         val caseId =
             creditCases
                 .createCase(
-                    CreateCreditCaseCommand("Client Revue", ProductType.LEASING, "GNF", dri, contractType = ContractType.AVEC_CONTRAT),
+                    CreateCreditCaseCommand(
+                        com.nimba.seedClient(clients, "Client Revue"),
+                        ProductType.LEASING,
+                        "GNF",
+                        dri,
+                        contractType = ContractType.AVEC_CONTRAT,
+                    ),
                 ).id
         val line =
             AmortizationScheduleLine(

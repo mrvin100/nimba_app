@@ -40,7 +40,7 @@ class CreditCaseController(
         creditCases
             .createCase(
                 CreateCreditCaseCommand(
-                    clientName = request.clientName,
+                    clientId = request.clientId,
                     productType = request.productType,
                     currency = request.currency,
                     createdBy = currentUser.id(),
@@ -58,7 +58,7 @@ class CreditCaseController(
             .updateCase(
                 id,
                 UpdateCreditCaseCommand(
-                    clientName = request.clientName,
+                    clientId = request.clientId,
                     productType = request.productType,
                     currency = request.currency,
                     accountNumber = request.accountNumber,
@@ -70,12 +70,6 @@ class CreditCaseController(
     fun getById(
         @PathVariable id: UUID,
     ): CreditCaseResponse = creditCases.getOrThrow(id).toResponse()
-
-    @PutMapping("/{id}/identity")
-    fun updateIdentity(
-        @PathVariable id: UUID,
-        @Valid @RequestBody request: ClientIdentityRequest,
-    ): CreditCaseResponse = creditCases.updateIdentity(id, request.toCommand()).toResponse()
 
     @PutMapping("/{id}/conditions-banque")
     fun updateConditionsDeBanque(

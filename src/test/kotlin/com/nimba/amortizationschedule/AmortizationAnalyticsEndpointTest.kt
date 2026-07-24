@@ -33,6 +33,7 @@ class AmortizationAnalyticsEndpointTest(
     @Autowired private val users: UserRepository,
     @Autowired private val passwordEncoder: PasswordEncoder,
     @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val clients: com.nimba.client.ClientModuleApi,
     @Value("\${local.server.port}") private val port: Int,
 ) {
     private val boundary = "----NimbaAnalyticsBoundary"
@@ -88,7 +89,13 @@ class AmortizationAnalyticsEndpointTest(
         val caseId =
             creditCases
                 .createCase(
-                    CreateCreditCaseCommand("Analytics", ProductType.LEASING, "GNF", analystId(), contractType = ContractType.AVEC_CONTRAT),
+                    CreateCreditCaseCommand(
+                        com.nimba.seedClient(clients, "Analytics"),
+                        ProductType.LEASING,
+                        "GNF",
+                        analystId(),
+                        contractType = ContractType.AVEC_CONTRAT,
+                    ),
                 ).id
         upload(client, caseId)
 
@@ -127,7 +134,7 @@ class AmortizationAnalyticsEndpointTest(
             creditCases
                 .createCase(
                     CreateCreditCaseCommand(
-                        "Analytics Range",
+                        com.nimba.seedClient(clients, "Analytics Range"),
                         ProductType.LEASING,
                         "GNF",
                         analystId(),
@@ -155,7 +162,7 @@ class AmortizationAnalyticsEndpointTest(
             creditCases
                 .createCase(
                     CreateCreditCaseCommand(
-                        "Analytics Table",
+                        com.nimba.seedClient(clients, "Analytics Table"),
                         ProductType.LEASING,
                         "GNF",
                         analystId(),
@@ -180,7 +187,7 @@ class AmortizationAnalyticsEndpointTest(
             creditCases
                 .createCase(
                     CreateCreditCaseCommand(
-                        "Analytics Tri",
+                        com.nimba.seedClient(clients, "Analytics Tri"),
                         ProductType.LEASING,
                         "GNF",
                         analystId(),
@@ -209,7 +216,7 @@ class AmortizationAnalyticsEndpointTest(
             creditCases
                 .createCase(
                     CreateCreditCaseCommand(
-                        "Sans Échéancier",
+                        com.nimba.seedClient(clients, "Sans Échéancier"),
                         ProductType.LEASING,
                         "GNF",
                         analystId(),

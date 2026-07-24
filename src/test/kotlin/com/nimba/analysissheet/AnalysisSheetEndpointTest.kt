@@ -31,6 +31,7 @@ class AnalysisSheetEndpointTest(
     @Autowired private val users: UserRepository,
     @Autowired private val passwordEncoder: PasswordEncoder,
     @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val clients: com.nimba.client.ClientModuleApi,
     @Value("\${local.server.port}") private val port: Int,
 ) {
     private val boundary = "----NimbaAnalysisSheetBoundary"
@@ -56,7 +57,13 @@ class AnalysisSheetEndpointTest(
     private fun newCaseId(): UUID =
         creditCases
             .createCase(
-                CreateCreditCaseCommand("Client FA", ProductType.LEASING, "GNF", analystId(), contractType = ContractType.AVEC_CONTRAT),
+                CreateCreditCaseCommand(
+                    com.nimba.seedClient(clients, "Client FA"),
+                    ProductType.LEASING,
+                    "GNF",
+                    analystId(),
+                    contractType = ContractType.AVEC_CONTRAT,
+                ),
             ).id
 
     private fun uploadSchedule(

@@ -39,6 +39,7 @@ class PvEndpointTest(
     @Autowired private val users: UserRepository,
     @Autowired private val passwordEncoder: PasswordEncoder,
     @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val clients: com.nimba.client.ClientModuleApi,
     @Autowired private val analysisSheets: AnalysisSheetModuleApi,
     @Autowired private val schedules: AmortizationScheduleRepository,
     @Autowired private val workflow: WorkflowService,
@@ -104,7 +105,13 @@ class PvEndpointTest(
         val caseId =
             creditCases
                 .createCase(
-                    CreateCreditCaseCommand("Client PV HTTP", ProductType.LEASING, "GNF", driId, contractType = ContractType.AVEC_CONTRAT),
+                    CreateCreditCaseCommand(
+                        com.nimba.seedClient(clients, "Client PV HTTP"),
+                        ProductType.LEASING,
+                        "GNF",
+                        driId,
+                        contractType = ContractType.AVEC_CONTRAT,
+                    ),
                 ).id
         val line =
             AmortizationScheduleLine(
@@ -194,7 +201,13 @@ class PvEndpointTest(
         val caseId =
             creditCases
                 .createCase(
-                    CreateCreditCaseCommand("Trop tôt HTTP", ProductType.LEASING, "GNF", driId, contractType = ContractType.AVEC_CONTRAT),
+                    CreateCreditCaseCommand(
+                        com.nimba.seedClient(clients, "Trop tôt HTTP"),
+                        ProductType.LEASING,
+                        "GNF",
+                        driId,
+                        contractType = ContractType.AVEC_CONTRAT,
+                    ),
                 ).id
         val dcm = clientFor("pv-http-dcm3@banque.test")
 

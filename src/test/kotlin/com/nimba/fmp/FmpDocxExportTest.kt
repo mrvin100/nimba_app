@@ -42,6 +42,7 @@ class FmpDocxExportTest(
     @Autowired private val fmps: FmpModuleApi,
     @Autowired private val pvs: PvModuleApi,
     @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val clients: com.nimba.client.ClientModuleApi,
     @Autowired private val analysisSheets: AnalysisSheetModuleApi,
     @Autowired private val guarantees: GuaranteeModuleApi,
     @Autowired private val schedules: AmortizationScheduleRepository,
@@ -66,7 +67,7 @@ class FmpDocxExportTest(
             creditCases
                 .createCase(
                     CreateCreditCaseCommand(
-                        "OUSMANE CAMARA ET FRERES",
+                        com.nimba.seedClient(clients, "OUSMANE CAMARA ET FRERES"),
                         ProductType.LEASING,
                         "GNF",
                         dri,
