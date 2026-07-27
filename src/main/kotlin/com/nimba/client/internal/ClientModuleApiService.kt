@@ -19,7 +19,7 @@ class ClientModuleApiService(
 ) : ClientModuleApi {
     @Transactional
     override fun create(command: CreateClientCommand): ClientInfo {
-        if (clients.existsByMatricule(command.matricule)) {
+        if (command.matricule != null && clients.existsByMatricule(command.matricule)) {
             throw ResponseStatusException(HttpStatus.CONFLICT, "Un client existe déjà avec ce matricule")
         }
         val client =
@@ -28,6 +28,7 @@ class ClientModuleApiService(
                 raisonSociale = command.raisonSociale,
                 createdBy = command.createdBy,
             ).apply {
+                type = command.type
                 sigle = command.sigle
                 formeJuridique = command.formeJuridique
                 dateCreation = command.dateCreation
@@ -81,6 +82,9 @@ class ClientModuleApiService(
     override fun findById(id: UUID): ClientInfo? = clients.findById(id).orElse(null)?.toInfo()
 
     @Transactional(readOnly = true)
+    override fun findByIds(ids: Collection<UUID>): List<ClientInfo> = clients.findAllById(ids).map { it.toInfo() }
+
+    @Transactional(readOnly = true)
     override fun findByMatricule(matricule: String): ClientInfo? = clients.findByMatricule(matricule)?.toInfo()
 
     @Transactional(readOnly = true)
@@ -90,6 +94,7 @@ class ClientModuleApiService(
 private fun Client.toInfo(): ClientInfo =
     ClientInfo(
         id = requireNotNull(id),
+        type = type,
         matricule = matricule,
         raisonSociale = raisonSociale,
         sigle = sigle,

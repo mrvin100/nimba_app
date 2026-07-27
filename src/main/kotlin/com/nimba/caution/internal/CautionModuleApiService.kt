@@ -15,6 +15,7 @@ import com.nimba.caution.CreateDossierCommand
 import com.nimba.caution.DossierAction
 import com.nimba.caution.DossierStatus
 import com.nimba.caution.UpdateCautionCommand
+import com.nimba.client.ClientInfo
 import com.nimba.client.ClientModuleApi
 import com.nimba.client.getOrThrow
 import org.springframework.context.ApplicationEventPublisher
@@ -43,6 +44,7 @@ class CautionModuleApiService(
     @Transactional
     override fun create(command: CreateCautionCommand): CautionInfo {
         val client = clients.getOrThrow(command.clientId)
+        val matricule = requireMatricule(client)
         requireRequiredFields(command.documentType, command.content, inDossier = command.dossierId != null)
         command.dossierId?.let {
             requireDossierForClient(it, client.id)
@@ -56,7 +58,7 @@ class CautionModuleApiService(
                     documentType = command.documentType,
                     referenceNumber =
                         numberGenerator.nextReferenceNumber(
-                            client.matricule,
+                            matricule,
                             command.documentType,
                             command.startingReferenceSequence,
                         ),
@@ -72,11 +74,12 @@ class CautionModuleApiService(
     @Transactional
     override fun createDossier(command: CreateDossierCommand): CautionDossierInfo {
         val client = clients.getOrThrow(command.clientId)
+        val matricule = requireMatricule(client)
         val dossier =
             dossiers.save(
                 CautionDossier(
                     clientId = client.id,
-                    referenceNumber = numberGenerator.nextDossierReferenceNumber(client.matricule, command.startingReferenceSequence),
+                    referenceNumber = numberGenerator.nextDossierReferenceNumber(matricule, command.startingReferenceSequence),
                     createdBy = command.createdBy,
                 ).apply {
                     contentJson = objectMapper.writeValueAsString(command.content)
@@ -180,6 +183,11 @@ class CautionModuleApiService(
         )
         return dossier.toInfo(objectMapper)
     }
+
+    /** A caution's official reference number embeds the client's matricule, so it must be present to issue one (it is optional on the client otherwise). */
+    private fun requireMatricule(client: ClientInfo): String =
+        client.matricule
+            ?: throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Le client doit disposer d'un matricule pour émettre une caution")
 
     /** A dossier accepts writes (add/edit/delete of documents and common info) only while BROUILLON or EN_PROROGATION. */
     private fun assertWritable(dossier: CautionDossier) {

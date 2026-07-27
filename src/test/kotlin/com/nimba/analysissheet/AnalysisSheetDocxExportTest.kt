@@ -33,6 +33,7 @@ import kotlin.test.assertTrue
 @SpringBootTest
 class AnalysisSheetDocxExportTest(
     @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val clients: com.nimba.client.ClientModuleApi,
     @Autowired private val schedules: AmortizationScheduleRepository,
     @Autowired private val sheets: AnalysisSheetModuleApi,
     @Autowired private val export: AnalysisSheetDocxExportService,
@@ -51,7 +52,13 @@ class AnalysisSheetDocxExportTest(
         val caseId =
             creditCases
                 .createCase(
-                    CreateCreditCaseCommand("SOCIETE TEST", ProductType.LEASING, "GNF", analyst, contractType = ContractType.AVEC_CONTRAT),
+                    CreateCreditCaseCommand(
+                        com.nimba.seedClient(clients, "SOCIETE TEST"),
+                        ProductType.LEASING,
+                        "GNF",
+                        analyst,
+                        contractType = ContractType.AVEC_CONTRAT,
+                    ),
                 ).id
         val line =
             AmortizationScheduleLine(

@@ -7,11 +7,11 @@ import com.nimba.amortizationschedule.internal.AmortizationScheduleRepository
 import com.nimba.analysissheet.AnalysisSheetModuleApi
 import com.nimba.analysissheet.CreateAnalysisSheetCommand
 import com.nimba.analysissheet.FaSectionKey
+import com.nimba.client.CreateClientCommand
 import com.nimba.creditcase.ContractType
 import com.nimba.creditcase.CreateCreditCaseCommand
 import com.nimba.creditcase.CreditCaseModuleApi
 import com.nimba.creditcase.ProductType
-import com.nimba.creditcase.UpdateClientIdentityCommand
 import com.nimba.creditcase.UpdateConditionsDeBanqueCommand
 import com.nimba.guarantee.CreateGuaranteeCommand
 import com.nimba.guarantee.GuaranteeKind
@@ -43,6 +43,7 @@ import kotlin.test.assertTrue
 class PvDocxExportTest(
     @Autowired private val pvs: PvModuleApi,
     @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val clients: com.nimba.client.ClientModuleApi,
     @Autowired private val analysisSheets: AnalysisSheetModuleApi,
     @Autowired private val guarantees: GuaranteeModuleApi,
     @Autowired private val schedules: AmortizationScheduleRepository,
@@ -63,10 +64,21 @@ class PvDocxExportTest(
         val comite1 = memberId("pv-export-comite1-${UUID.randomUUID()}@banque.test", Department.COMITE)
         val comite2 = memberId("pv-export-comite2-${UUID.randomUUID()}@banque.test", Department.COMITE)
 
+        val clientId =
+            clients
+                .create(
+                    CreateClientCommand(
+                        raisonSociale = "ICAB CONSTRUCTION",
+                        createdBy = dri,
+                        formeJuridique = "SARL",
+                        principalDirigeant = "CAMARA ISMAEL",
+                        agence = "MADINA",
+                    ),
+                ).id
         val caseId =
             creditCases
                 .createCase(
-                    CreateCreditCaseCommand("ICAB CONSTRUCTION", ProductType.LEASING, "GNF", dri, contractType = ContractType.AVEC_CONTRAT),
+                    CreateCreditCaseCommand(clientId, ProductType.LEASING, "GNF", dri, contractType = ContractType.AVEC_CONTRAT),
                 ).id
         val line =
             AmortizationScheduleLine(
@@ -85,10 +97,6 @@ class PvDocxExportTest(
             )
         schedules.saveAndFlush(AmortizationSchedule(caseId, 1, "echeancier.csv", dri).apply { addLine(line) })
         analysisSheets.create(CreateAnalysisSheetCommand(caseId, dri))
-        creditCases.updateIdentity(
-            caseId,
-            UpdateClientIdentityCommand(formeJuridique = "SARL", principalDirigeant = "CAMARA ISMAEL", agence = "MADINA"),
-        )
         creditCases.updateConditionsDeBanque(
             caseId,
             UpdateConditionsDeBanqueCommand(fraisMiseEnPlacePct = BigDecimal("1"), valeurResiduellePct = BigDecimal("2")),

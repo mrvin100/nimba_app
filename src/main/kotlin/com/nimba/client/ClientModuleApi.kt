@@ -23,6 +23,9 @@ interface ClientModuleApi {
 
     fun findById(id: UUID): ClientInfo?
 
+    /** Batch resolve clients by id, in no particular order — lets a consumer paging a list of dossiers fetch their clients in one query. */
+    fun findByIds(ids: Collection<UUID>): List<ClientInfo>
+
     fun findByMatricule(matricule: String): ClientInfo?
 
     /** Pages through every client, newest first. */

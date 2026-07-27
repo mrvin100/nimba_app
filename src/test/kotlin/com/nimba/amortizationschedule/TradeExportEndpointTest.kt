@@ -37,6 +37,7 @@ class TradeExportEndpointTest(
     @Autowired private val users: UserRepository,
     @Autowired private val passwordEncoder: PasswordEncoder,
     @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val clients: com.nimba.client.ClientModuleApi,
     @Value("\${local.server.port}") private val port: Int,
 ) {
     private val boundary = "----NimbaExportBoundary"
@@ -99,7 +100,7 @@ class TradeExportEndpointTest(
         val created =
             creditCases.createCase(
                 CreateCreditCaseCommand(
-                    "ETS OC ET FRERES",
+                    com.nimba.seedClient(clients, "ETS OC ET FRERES"),
                     ProductType.LEASING,
                     "GNF",
                     analystId(),
@@ -126,7 +127,7 @@ class TradeExportEndpointTest(
         val created =
             creditCases.createCase(
                 CreateCreditCaseCommand(
-                    "ETS OC ET FRERES",
+                    com.nimba.seedClient(clients, "ETS OC ET FRERES"),
                     ProductType.LEASING,
                     "GNF",
                     analystId(),
@@ -196,7 +197,7 @@ class TradeExportEndpointTest(
             creditCases
                 .createCase(
                     CreateCreditCaseCommand(
-                        "Sans Trades",
+                        com.nimba.seedClient(clients, "Sans Trades"),
                         ProductType.LEASING,
                         "GNF",
                         analystId(),
@@ -215,7 +216,13 @@ class TradeExportEndpointTest(
         val caseId =
             creditCases
                 .createCase(
-                    CreateCreditCaseCommand("Anon", ProductType.LEASING, "GNF", analystId(), contractType = ContractType.AVEC_CONTRAT),
+                    CreateCreditCaseCommand(
+                        com.nimba.seedClient(clients, "Anon"),
+                        ProductType.LEASING,
+                        "GNF",
+                        analystId(),
+                        contractType = ContractType.AVEC_CONTRAT,
+                    ),
                 ).id
 
         val response = export(anonymous, caseId)

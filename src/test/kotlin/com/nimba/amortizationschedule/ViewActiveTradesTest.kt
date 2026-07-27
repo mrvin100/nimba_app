@@ -30,6 +30,7 @@ class ViewActiveTradesTest(
     @Autowired private val users: UserRepository,
     @Autowired private val passwordEncoder: PasswordEncoder,
     @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val clients: com.nimba.client.ClientModuleApi,
     @Value("\${local.server.port}") private val port: Int,
 ) {
     private val boundary = "----NimbaViewBoundary"
@@ -96,7 +97,13 @@ class ViewActiveTradesTest(
         val caseId =
             creditCases
                 .createCase(
-                    CreateCreditCaseCommand("Vide", ProductType.LEASING, "GNF", analystId(), contractType = ContractType.AVEC_CONTRAT),
+                    CreateCreditCaseCommand(
+                        com.nimba.seedClient(clients, "Vide"),
+                        ProductType.LEASING,
+                        "GNF",
+                        analystId(),
+                        contractType = ContractType.AVEC_CONTRAT,
+                    ),
                 ).id
 
         val response = list(client, caseId)
@@ -112,7 +119,7 @@ class ViewActiveTradesTest(
             creditCases
                 .createCase(
                     CreateCreditCaseCommand(
-                        "ETS OC ET FRERES",
+                        com.nimba.seedClient(clients, "ETS OC ET FRERES"),
                         ProductType.LEASING,
                         "GNF",
                         analystId(),
@@ -137,7 +144,13 @@ class ViewActiveTradesTest(
         val caseId =
             creditCases
                 .createCase(
-                    CreateCreditCaseCommand("Anon", ProductType.LEASING, "GNF", analystId(), contractType = ContractType.AVEC_CONTRAT),
+                    CreateCreditCaseCommand(
+                        com.nimba.seedClient(clients, "Anon"),
+                        ProductType.LEASING,
+                        "GNF",
+                        analystId(),
+                        contractType = ContractType.AVEC_CONTRAT,
+                    ),
                 ).id
 
         val response = list(anonymous, caseId)

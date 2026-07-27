@@ -41,6 +41,7 @@ class LatestScheduleEndpointTest(
     @Autowired private val users: UserRepository,
     @Autowired private val passwordEncoder: PasswordEncoder,
     @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val clients: com.nimba.client.ClientModuleApi,
     @Value("\${local.server.port}") private val port: Int,
 ) {
     private val boundary = "----NimbaLatestScheduleBoundary"
@@ -99,7 +100,7 @@ class LatestScheduleEndpointTest(
             creditCases
                 .createCase(
                     CreateCreditCaseCommand(
-                        "État Échéancier",
+                        com.nimba.seedClient(clients, "État Échéancier"),
                         ProductType.LEASING,
                         "GNF",
                         analystId(),

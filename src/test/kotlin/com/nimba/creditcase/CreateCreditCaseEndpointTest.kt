@@ -1,7 +1,9 @@
 package com.nimba.creditcase
 
 import com.nimba.TestcontainersConfiguration
+import com.nimba.client.ClientModuleApi
 import com.nimba.identity.internal.UserRepository
+import com.nimba.seedClient
 import com.nimba.seedDriAnalyst
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -15,6 +17,7 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.util.UUID
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -23,6 +26,7 @@ import kotlin.test.assertTrue
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class CreateCreditCaseEndpointTest(
     @Autowired private val users: UserRepository,
+    @Autowired private val clients: ClientModuleApi,
     @Autowired private val passwordEncoder: PasswordEncoder,
     @Value("\${local.server.port}") private val port: Int,
 ) {
@@ -30,6 +34,9 @@ class CreateCreditCaseEndpointTest(
     fun seedAnalyst() {
         seedDriAnalyst(users, passwordEncoder, "creator@banque.test")
     }
+
+    /** Seeds a client (the dossier's required link) named [raisonSociale] and returns its id. */
+    private fun clientId(raisonSociale: String): String = seedClient(clients, raisonSociale).toString()
 
     private fun authenticatedClient(): HttpClient {
         val client = HttpClient.newBuilder().cookieHandler(CookieManager()).build()
@@ -50,13 +57,14 @@ class CreateCreditCaseEndpointTest(
     @Test
     fun `creates a credit case and returns 201 with a generated case number`() {
         val client = authenticatedClient()
+        val id = clientId("ETS OC ET FRERES")
 
         val response =
             client.send(
                 request("/api/v1/credit-cases")
                     .POST(
                         json(
-                            """{"clientName":"ETS OC ET FRERES","productType":"LEASING","contractType":"AVEC_CONTRAT",""" +
+                            """{"clientId":"$id","productType":"LEASING","contractType":"AVEC_CONTRAT",""" +
                                 """"currency":"GNF","accountNumber":"0102386501-90"}""",
                         ),
                     ).build(),
@@ -72,11 +80,12 @@ class CreateCreditCaseEndpointTest(
     @Test
     fun `creates an MC2_MUFFA case without a contract type`() {
         val client = authenticatedClient()
+        val id = clientId("MC2 Client")
 
         val response =
             client.send(
                 request("/api/v1/credit-cases")
-                    .POST(json("""{"clientName":"MC2 Client","productType":"MC2_MUFFA","currency":"GNF"}"""))
+                    .POST(json("""{"clientId":"$id","productType":"MC2_MUFFA","currency":"GNF"}"""))
                     .build(),
                 HttpResponse.BodyHandlers.ofString(),
             )
@@ -88,11 +97,12 @@ class CreateCreditCaseEndpointTest(
     @Test
     fun `rejects a LEASING case without a contract type`() {
         val client = authenticatedClient()
+        val id = clientId("Client Sans Type")
 
         val response =
             client.send(
                 request("/api/v1/credit-cases")
-                    .POST(json("""{"clientName":"Client Sans Type","productType":"LEASING","currency":"GNF"}"""))
+                    .POST(json("""{"clientId":"$id","productType":"LEASING","currency":"GNF"}"""))
                     .build(),
                 HttpResponse.BodyHandlers.ofString(),
             )
@@ -103,13 +113,14 @@ class CreateCreditCaseEndpointTest(
     @Test
     fun `rejects an MC2_MUFFA case carrying a contract type`() {
         val client = authenticatedClient()
+        val id = clientId("Client Incohérent")
 
         val response =
             client.send(
                 request("/api/v1/credit-cases")
                     .POST(
                         json(
-                            """{"clientName":"Client Incohérent","productType":"MC2_MUFFA","contractType":"AVEC_CONTRAT",""" +
+                            """{"clientId":"$id","productType":"MC2_MUFFA","contractType":"AVEC_CONTRAT",""" +
                                 """"currency":"GNF"}""",
                         ),
                     ).build(),
@@ -126,7 +137,7 @@ class CreateCreditCaseEndpointTest(
         val response =
             anonymous.send(
                 request("/api/v1/credit-cases")
-                    .POST(json("""{"clientName":"Client X","productType":"LEASING","currency":"GNF"}"""))
+                    .POST(json("""{"clientId":"${UUID.randomUUID()}","productType":"LEASING","currency":"GNF"}"""))
                     .build(),
                 HttpResponse.BodyHandlers.ofString(),
             )
@@ -135,17 +146,17 @@ class CreateCreditCaseEndpointTest(
     }
 
     @Test
-    fun `rejects a blank client name with 400`() {
+    fun `rejects creation for an unknown client with 404`() {
         val client = authenticatedClient()
 
         val response =
             client.send(
                 request("/api/v1/credit-cases")
-                    .POST(json("""{"clientName":"","productType":"LEASING","currency":"GNF"}"""))
+                    .POST(json("""{"clientId":"${UUID.randomUUID()}","productType":"MC2_MUFFA","currency":"GNF"}"""))
                     .build(),
                 HttpResponse.BodyHandlers.ofString(),
             )
 
-        assertEquals(400, response.statusCode())
+        assertEquals(404, response.statusCode())
     }
 }

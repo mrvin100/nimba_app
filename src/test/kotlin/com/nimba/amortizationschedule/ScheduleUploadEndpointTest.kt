@@ -33,6 +33,7 @@ class ScheduleUploadEndpointTest(
     @Autowired private val users: UserRepository,
     @Autowired private val passwordEncoder: PasswordEncoder,
     @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val clients: com.nimba.client.ClientModuleApi,
     @Autowired private val schedules: AmortizationScheduleRepository,
     @Value("\${local.server.port}") private val port: Int,
 ) {
@@ -59,7 +60,13 @@ class ScheduleUploadEndpointTest(
     private fun newCaseId(): UUID =
         creditCases
             .createCase(
-                CreateCreditCaseCommand("Client Upload", ProductType.LEASING, "GNF", analystId(), contractType = ContractType.AVEC_CONTRAT),
+                CreateCreditCaseCommand(
+                    com.nimba.seedClient(clients, "Client Upload"),
+                    ProductType.LEASING,
+                    "GNF",
+                    analystId(),
+                    contractType = ContractType.AVEC_CONTRAT,
+                ),
             ).id
 
     private fun upload(

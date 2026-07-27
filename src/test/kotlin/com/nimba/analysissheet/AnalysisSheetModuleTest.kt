@@ -29,6 +29,7 @@ import kotlin.test.assertTrue
 @SpringBootTest
 class AnalysisSheetModuleTest(
     @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val clients: com.nimba.client.ClientModuleApi,
     @Autowired private val schedules: AmortizationScheduleRepository,
     @Autowired private val sheets: AnalysisSheetModuleApi,
     @Autowired private val imageService: AnalysisSheetImageService,
@@ -45,7 +46,13 @@ class AnalysisSheetModuleTest(
     private fun leasingCaseId(analyst: UUID): UUID =
         creditCases
             .createCase(
-                CreateCreditCaseCommand("Client FA", ProductType.LEASING, "GNF", analyst, contractType = ContractType.AVEC_CONTRAT),
+                CreateCreditCaseCommand(
+                    com.nimba.seedClient(clients, "Client FA"),
+                    ProductType.LEASING,
+                    "GNF",
+                    analyst,
+                    contractType = ContractType.AVEC_CONTRAT,
+                ),
             ).id
 
     private fun uploadSchedule(caseId: UUID) {

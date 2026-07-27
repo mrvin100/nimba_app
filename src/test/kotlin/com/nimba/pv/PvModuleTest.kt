@@ -38,6 +38,7 @@ import kotlin.test.assertNull
 class PvModuleTest(
     @Autowired private val pvs: PvModuleApi,
     @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val clients: com.nimba.client.ClientModuleApi,
     @Autowired private val analysisSheets: AnalysisSheetModuleApi,
     @Autowired private val guarantees: GuaranteeModuleApi,
     @Autowired private val schedules: AmortizationScheduleRepository,
@@ -63,10 +64,11 @@ class PvModuleTest(
         val comite1 = memberId("pv-comite1-${UUID.randomUUID()}@banque.test", Department.COMITE)
         val comite2 = memberId("pv-comite2-${UUID.randomUUID()}@banque.test", Department.COMITE)
 
+        val clientId = com.nimba.seedClient(clients, "Client PV")
         val caseId =
             creditCases
                 .createCase(
-                    CreateCreditCaseCommand("Client PV", ProductType.LEASING, "GNF", dri, contractType = ContractType.AVEC_CONTRAT),
+                    CreateCreditCaseCommand(clientId, ProductType.LEASING, "GNF", dri, contractType = ContractType.AVEC_CONTRAT),
                 ).id
         val line =
             AmortizationScheduleLine(
@@ -86,9 +88,13 @@ class PvModuleTest(
         schedules.saveAndFlush(AmortizationSchedule(caseId, 1, "echeancier.csv", dri).apply { addLine(line) })
         analysisSheets.create(CreateAnalysisSheetCommand(caseId, dri))
         if (withIdentityAndConditions) {
-            creditCases.updateIdentity(
-                caseId,
-                com.nimba.creditcase.UpdateClientIdentityCommand(formeJuridique = "SARL", principalDirigeant = "Mamadou Diallo"),
+            clients.update(
+                clientId,
+                com.nimba.client.UpdateClientCommand(
+                    raisonSociale = "Client PV",
+                    formeJuridique = "SARL",
+                    principalDirigeant = "Mamadou Diallo",
+                ),
             )
             creditCases.updateConditionsDeBanque(
                 caseId,
@@ -118,7 +124,13 @@ class PvModuleTest(
         val caseId =
             creditCases
                 .createCase(
-                    CreateCreditCaseCommand("Trop tôt", ProductType.LEASING, "GNF", dri, contractType = ContractType.AVEC_CONTRAT),
+                    CreateCreditCaseCommand(
+                        com.nimba.seedClient(clients, "Trop tôt"),
+                        ProductType.LEASING,
+                        "GNF",
+                        dri,
+                        contractType = ContractType.AVEC_CONTRAT,
+                    ),
                 ).id
 
         assertFailsWith<ResponseStatusException> {
@@ -164,7 +176,8 @@ class PvModuleTest(
         assertEquals("Trésorerie tendue", snapshot.pointsFaibles)
 
         // The snapshot must survive the dossier's live data changing afterward.
-        creditCases.updateIdentity(caseId, com.nimba.creditcase.UpdateClientIdentityCommand(formeJuridique = "SA"))
+        val clientId = requireNotNull(creditCases.findById(caseId)).clientId
+        clients.update(clientId, com.nimba.client.UpdateClientCommand(raisonSociale = "Client PV", formeJuridique = "SA"))
         val reloaded = requireNotNull(pvs.findByCase(caseId))
         assertEquals("SARL", requireNotNull(reloaded.snapshot).identite.formeJuridique)
     }

@@ -36,6 +36,7 @@ class WorkflowEndpointTest(
     @Autowired private val users: UserRepository,
     @Autowired private val passwordEncoder: PasswordEncoder,
     @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val clients: com.nimba.client.ClientModuleApi,
     @Autowired private val analysisSheets: AnalysisSheetModuleApi,
     @Autowired private val schedules: AmortizationScheduleRepository,
     @Value("\${local.server.port}") private val port: Int,
@@ -85,7 +86,13 @@ class WorkflowEndpointTest(
         val caseId =
             creditCases
                 .createCase(
-                    CreateCreditCaseCommand("Client HTTP", ProductType.LEASING, "GNF", driId, contractType = ContractType.AVEC_CONTRAT),
+                    CreateCreditCaseCommand(
+                        com.nimba.seedClient(clients, "Client HTTP"),
+                        ProductType.LEASING,
+                        "GNF",
+                        driId,
+                        contractType = ContractType.AVEC_CONTRAT,
+                    ),
                 ).id
         val line =
             AmortizationScheduleLine(

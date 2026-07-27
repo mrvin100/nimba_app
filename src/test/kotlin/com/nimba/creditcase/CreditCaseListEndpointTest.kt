@@ -1,7 +1,9 @@
 package com.nimba.creditcase
 
 import com.nimba.TestcontainersConfiguration
+import com.nimba.client.ClientModuleApi
 import com.nimba.identity.internal.UserRepository
+import com.nimba.seedClient
 import com.nimba.seedDriAnalyst
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -22,6 +24,7 @@ import kotlin.test.assertTrue
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class CreditCaseListEndpointTest(
     @Autowired private val users: UserRepository,
+    @Autowired private val clients: ClientModuleApi,
     @Autowired private val passwordEncoder: PasswordEncoder,
     @Value("\${local.server.port}") private val port: Int,
 ) {
@@ -45,10 +48,11 @@ class CreditCaseListEndpointTest(
         client: HttpClient,
         clientName: String,
     ): String {
+        val id = seedClient(clients, clientName)
         val response =
             client.send(
                 req("/api/v1/credit-cases")
-                    .POST(body("""{"clientName":"$clientName","productType":"LEASING","contractType":"AVEC_CONTRAT","currency":"GNF"}"""))
+                    .POST(body("""{"clientId":"$id","productType":"LEASING","contractType":"AVEC_CONTRAT","currency":"GNF"}"""))
                     .build(),
                 HttpResponse.BodyHandlers.ofString(),
             )
