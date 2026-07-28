@@ -2,7 +2,11 @@ package com.nimba.client
 
 import java.time.LocalDate
 
-/** Replaces a client's descriptive details wholesale; [matricule] itself never changes after creation. */
+/**
+ * Replaces a client's descriptive details wholesale. Does not touch [matricule] —
+ * a data-entry correction to it is a separate, more tightly gated action, see
+ * [UpdateClientMatriculeCommand].
+ */
 data class UpdateClientCommand(
     val raisonSociale: String,
     val sigle: String? = null,

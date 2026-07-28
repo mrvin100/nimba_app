@@ -185,6 +185,13 @@ class SecurityConfig(
                 it.requestMatchers(HttpMethod.POST, "$base/caution-dossiers/*/proroge").hasRole("DCM_MANAGER")
                 it.requestMatchers(HttpMethod.DELETE, "$base/caution-dossiers/*").hasRole("ADMIN")
                 it.requestMatchers("$base/cautions/**", "$base/caution-dossiers/**").hasRole("DCM_MEMBER")
+                // Correcting a client's matricule is rarer and more sensitive than
+                // editing the rest of the fiche (it feeds document numbering and
+                // identity matching across every product) — reserved to a direction
+                // manager, either direction, unlike the general update below.
+                // Matched before it for the same reason as every other manager-gated
+                // action in this file.
+                it.requestMatchers(HttpMethod.PUT, "$base/clients/*/matricule").hasAnyRole("DRI_MANAGER", "DCM_MANAGER")
                 // The client registry is the single source of client identity, shared
                 // by both the DRI's credit dossiers and the DCM's cautions, so both
                 // directions read and create clients (a DRI opens a leasing dossier

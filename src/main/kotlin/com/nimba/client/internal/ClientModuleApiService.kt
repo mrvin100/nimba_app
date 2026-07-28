@@ -4,6 +4,7 @@ import com.nimba.client.ClientInfo
 import com.nimba.client.ClientModuleApi
 import com.nimba.client.CreateClientCommand
 import com.nimba.client.UpdateClientCommand
+import com.nimba.client.UpdateClientMatriculeCommand
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.http.HttpStatus
@@ -81,6 +82,21 @@ class ClientModuleApiService(
             cotationActuelle = command.cotationActuelle
             updatedAt = Instant.now()
         }
+        return client.toInfo()
+    }
+
+    @Transactional
+    override fun updateMatricule(
+        id: UUID,
+        command: UpdateClientMatriculeCommand,
+    ): ClientInfo {
+        val client = clients.findById(id).orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Client introuvable") }
+        val matricule = command.matricule?.takeIf { it.isNotBlank() }
+        if (matricule != null && clients.existsByMatriculeAndIdNot(matricule, id)) {
+            throw ResponseStatusException(HttpStatus.CONFLICT, "Un client existe déjà avec ce matricule")
+        }
+        client.matricule = matricule
+        client.updatedAt = Instant.now()
         return client.toInfo()
     }
 

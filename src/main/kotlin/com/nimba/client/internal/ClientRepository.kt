@@ -8,6 +8,12 @@ interface ClientRepository : JpaRepository<Client, UUID> {
 
     fun existsByMatricule(matricule: String): Boolean
 
+    /** Same check for a matricule correction: a client may keep its own matricule unchanged. */
+    fun existsByMatriculeAndIdNot(
+        matricule: String,
+        id: UUID,
+    ): Boolean
+
     /** codeNif is the client's national tax id — genuinely unique, unlike raisonSociale which can coincidentally match. */
     fun existsByCodeNif(codeNif: String): Boolean
 
