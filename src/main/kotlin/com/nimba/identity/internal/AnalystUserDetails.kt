@@ -24,6 +24,8 @@ class AnalystUserDetails(
     private val email: String,
     private val passwordHash: String?,
     val avatarKey: String? = null,
+    val titre: String? = null,
+    val signatoryOptIn: Boolean = false,
 ) : UserDetails,
     AuthenticatedUser {
     override fun getAuthorities(): Collection<GrantedAuthority> {

@@ -59,6 +59,14 @@ class User(
     @Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: Instant = Instant.now()
 
+    /** Job title, self-declared on the profile screen; also the display title when [signatoryOptIn]. */
+    @Column(name = "titre")
+    var titre: String? = null
+
+    /** Whether this user chose to appear as a pickable signatory (requires [titre] to be set). */
+    @Column(name = "signatory_opt_in", nullable = false)
+    var signatoryOptIn: Boolean = false
+
     /** A user who has not yet set a password (invitation not consumed). */
     val pending: Boolean
         get() = passwordHash == null

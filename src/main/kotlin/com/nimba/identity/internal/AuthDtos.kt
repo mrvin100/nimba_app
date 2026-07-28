@@ -21,4 +21,6 @@ data class MeResponse(
     val admin: Boolean,
     val hasAvatar: Boolean,
     val memberships: List<MembershipDto>,
+    val titre: String?,
+    val signatoryOptIn: Boolean,
 )

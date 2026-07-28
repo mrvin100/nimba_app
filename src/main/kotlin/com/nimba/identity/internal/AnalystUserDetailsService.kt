@@ -28,6 +28,8 @@ class AnalystUserDetailsService(
             email = user.email,
             passwordHash = user.passwordHash,
             avatarKey = user.avatarKey,
+            titre = user.titre,
+            signatoryOptIn = user.signatoryOptIn,
         )
     }
 }
