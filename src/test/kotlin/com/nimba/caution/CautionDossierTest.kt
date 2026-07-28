@@ -127,6 +127,16 @@ class CautionDossierTest(
     }
 
     @Test
+    fun `a finalized dossier cannot be deleted`() {
+        val dcm = dcmMemberId()
+        val client = clientId(dcm)
+        val dossier = cautions.createDossier(CreateDossierCommand(client, emptyMap(), dcm))
+        cautions.finalizeDossier(dossier.id, dcm)
+
+        assertFailsWith<ResponseStatusException> { cautions.deleteDossier(dossier.id) }
+    }
+
+    @Test
     fun `finalize locks the dossier, proroge reopens it, refinalize re-locks and journals every step`() {
         val dcm = dcmMemberId()
         val client = clientId(dcm)
