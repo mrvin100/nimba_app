@@ -141,7 +141,7 @@ class WorkflowService(
                 notifications.notifyDepartment(
                     Department.DCM,
                     creditCaseId,
-                    "Dossier $caseNumber rejeté par le comité — archivage à finaliser",
+                    "Dossier $caseNumber rejeté par le comité, archivage à finaliser",
                 )
             WorkflowStatus.REJETE -> {
                 notifications.notifyDepartment(Department.DRI, creditCaseId, "Dossier $caseNumber archivé après rejet du comité")

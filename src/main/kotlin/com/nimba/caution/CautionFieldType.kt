@@ -69,12 +69,12 @@ object CautionFieldRegistry {
             CautionFieldDefinition("referenceAppelOffres", "Référence de l'appel d'offres", CautionFieldType.TEXT),
             CautionFieldDefinition("objetMarche", "Objet du marché", CautionFieldType.TEXT),
             CautionFieldDefinition("dateEmission", "Date d'émission", CautionFieldType.DATE),
-            CautionFieldDefinition("signataire1Civilite", "Signataire 1 — Civilité", CautionFieldType.CIVILITY, optional = true),
-            CautionFieldDefinition("signataire1Nom", "Signataire 1 — Nom complet", CautionFieldType.TEXT),
-            CautionFieldDefinition("signataire1Titre", "Signataire 1 — Titre", CautionFieldType.TEXT),
-            CautionFieldDefinition("signataire2Civilite", "Signataire 2 — Civilité", CautionFieldType.CIVILITY, optional = true),
-            CautionFieldDefinition("signataire2Nom", "Signataire 2 — Nom complet", CautionFieldType.TEXT),
-            CautionFieldDefinition("signataire2Titre", "Signataire 2 — Titre", CautionFieldType.TEXT),
+            CautionFieldDefinition("signataire1Civilite", "Civilité du signataire 1", CautionFieldType.CIVILITY, optional = true),
+            CautionFieldDefinition("signataire1Nom", "Nom complet du signataire 1", CautionFieldType.TEXT),
+            CautionFieldDefinition("signataire1Titre", "Titre du signataire 1", CautionFieldType.TEXT),
+            CautionFieldDefinition("signataire2Civilite", "Civilité du signataire 2", CautionFieldType.CIVILITY, optional = true),
+            CautionFieldDefinition("signataire2Nom", "Nom complet du signataire 2", CautionFieldType.TEXT),
+            CautionFieldDefinition("signataire2Titre", "Titre du signataire 2", CautionFieldType.TEXT),
         ).map { it.copy(scope = CautionFieldScope.COMMON) }
 
     /** Per-document fields common to every type but proper to each document (the amount and its currency differ from one lot to the next). */

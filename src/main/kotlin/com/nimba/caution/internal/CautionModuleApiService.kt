@@ -333,7 +333,7 @@ class CautionModuleApiService(
         } else if (caution.status != CautionStatus.DRAFT) {
             throw ResponseStatusException(
                 HttpStatus.CONFLICT,
-                "Seul un brouillon peut être modifié — un document finalisé est une pièce officielle",
+                "Seul un brouillon peut être modifié, un document finalisé est une pièce officielle",
             )
         }
         return caution
