@@ -11,11 +11,17 @@ import java.time.format.DateTimeFormatter
 /**
  * Generates a caution's reference number:
  * `{sequence}-{matricule}-{documentType}-{date}` (e.g. `04370-038044-SMS-11-02-26`).
- * The sequence is a single global counter shared by every document type —
- * confirmed against the bank's real references (a SMS and an ACF for the
- * same client sat 19 apart) — produced by an atomic upsert on a dedicated
- * counter row, the same technique as [com.nimba.creditcase.internal.CreditCaseNumberGenerator],
- * so concurrent creations cannot collide or skip.
+ * The sequence is a single global counter shared by every document type AND
+ * every dossier — confirmed against the bank's real references (a SMS and an
+ * ACF for the same client sat 19 apart) — produced by an atomic upsert on a
+ * dedicated counter row, the same technique as
+ * [com.nimba.creditcase.internal.CreditCaseNumberGenerator], so concurrent
+ * creations cannot collide or skip.
+ *
+ * A dossier's own reference reorders the same fields to `{matricule}-DOS-{date}-{sequence}`
+ * instead — matricule first so dossiers for the same client sort and scan
+ * together, sequence last since it is purely a same-day disambiguator here
+ * (a dossier has no paper precedent to match, unlike a caution document).
  *
  * [startingSequence] lets the very first caution ever created continue the
  * bank's own pre-existing paper numbering instead of restarting at 1 — it
@@ -36,34 +42,34 @@ class CautionNumberGenerator(
         matricule: String,
         documentType: CautionDocumentType,
         startingSequence: Int? = null,
-    ): String = reference(matricule, documentType.code, startingSequence)
+    ): String {
+        val sequence = nextSequence(startingSequence)
+        val date = LocalDate.now(clock).format(dateFormat)
+        return "%05d-%s-%s-%s".format(sequence, matricule, documentType.code, date)
+    }
 
     /** A dossier's reference, drawn from the same global sequence as its documents, with a `DOS` code. */
     @Transactional
     fun nextDossierReferenceNumber(
         matricule: String,
         startingSequence: Int? = null,
-    ): String = reference(matricule, DOSSIER_CODE, startingSequence)
-
-    private fun reference(
-        matricule: String,
-        code: String,
-        startingSequence: Int?,
     ): String {
-        val sequence =
-            jdbcClient
-                .sql(
-                    """
-                    INSERT INTO caution_counter (id, last_value) VALUES (1, :start)
-                    ON CONFLICT (id) DO UPDATE SET last_value = caution_counter.last_value + 1
-                    RETURNING last_value
-                    """.trimIndent(),
-                ).param("start", startingSequence ?: 1)
-                .query(Int::class.java)
-                .single()
+        val sequence = nextSequence(startingSequence)
         val date = LocalDate.now(clock).format(dateFormat)
-        return "%05d-%s-%s-%s".format(sequence, matricule, code, date)
+        return "%s-%s-%s-%05d".format(matricule, DOSSIER_CODE, date, sequence)
     }
+
+    private fun nextSequence(startingSequence: Int?): Int =
+        jdbcClient
+            .sql(
+                """
+                INSERT INTO caution_counter (id, last_value) VALUES (1, :start)
+                ON CONFLICT (id) DO UPDATE SET last_value = caution_counter.last_value + 1
+                RETURNING last_value
+                """.trimIndent(),
+            ).param("start", startingSequence ?: 1)
+            .query(Int::class.java)
+            .single()
 
     /** Whether any caution has ever been created — the frontend only offers [nextReferenceNumber]'s starting-sequence override before this becomes true. */
     @Transactional(readOnly = true)

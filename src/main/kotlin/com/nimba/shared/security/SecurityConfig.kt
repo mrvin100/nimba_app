@@ -174,11 +174,14 @@ class SecurityConfig(
                 it.requestMatchers("$base/credit-cases/*/pv/**", "$base/credit-cases/*/fmp/**").hasRole("DCM_MEMBER")
                 // The Caution module (SMS, ACF...) backs DCM's tender-guarantee
                 // business — DCM-only. The critical, irreversible steps (finalizing a
-                // document into an official record, deleting one, closing a dossier)
-                // are reserved to a DCM manager; the role hierarchy lets a manager pass
-                // the member rules that follow. Matched before the member catch-all.
+                // document into an official record, closing a dossier) are reserved to
+                // a DCM manager; the role hierarchy lets a manager pass the member rules
+                // that follow. Matched before the member catch-all. Deleting a single
+                // document is reserved to a platform admin (not even a DCM manager) —
+                // ROLE_ADMIN is orthogonal to the department hierarchy, so this does not
+                // fall through it.
                 it.requestMatchers(HttpMethod.POST, "$base/cautions/*/finalize").hasRole("DCM_MANAGER")
-                it.requestMatchers(HttpMethod.DELETE, "$base/cautions/*").hasRole("DCM_MANAGER")
+                it.requestMatchers(HttpMethod.DELETE, "$base/cautions/*").hasRole("ADMIN")
                 it.requestMatchers(HttpMethod.POST, "$base/caution-dossiers/*/proroge").hasRole("DCM_MANAGER")
                 it.requestMatchers(HttpMethod.DELETE, "$base/caution-dossiers/*").hasRole("DCM_MANAGER")
                 it.requestMatchers("$base/cautions/**", "$base/caution-dossiers/**").hasRole("DCM_MEMBER")
