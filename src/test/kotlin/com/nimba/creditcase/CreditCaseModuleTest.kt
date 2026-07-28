@@ -60,7 +60,7 @@ class CreditCaseModuleTest(
                 ),
             )
 
-        assertTrue(first.caseNumber.matches(Regex("""DOS-\d{4}-\d{4}""")), "unexpected format: ${first.caseNumber}")
+        assertTrue(first.caseNumber.matches(Regex("""LEA-\d{4}-\d{4}""")), "unexpected format: ${first.caseNumber}")
         assertTrue(second.caseNumber != first.caseNumber, "case numbers must be unique")
         assertTrue(second.caseNumber > first.caseNumber, "case numbers must be strictly increasing")
     }
