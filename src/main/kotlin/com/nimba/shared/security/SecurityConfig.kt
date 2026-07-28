@@ -177,13 +177,15 @@ class SecurityConfig(
                 // and reopening a dossier for correction, are reserved to a DCM manager;
                 // the role hierarchy lets a manager pass the member rules that follow.
                 // Matched before the member catch-all. Deleting a document or a whole
-                // dossier is reserved to a platform admin (not even a DCM manager) —
-                // ROLE_ADMIN is orthogonal to the department hierarchy, so this does not
-                // fall through it.
+                // dossier is reserved to a DCM manager or a platform admin — the caution
+                // service itself still only allows it while the dossier is BROUILLON, so
+                // nothing already finalized/sent can ever be touched this way.
+                // ROLE_ADMIN is orthogonal to the department hierarchy, so hasAnyRole
+                // covers both without one falling through the other.
                 it.requestMatchers(HttpMethod.POST, "$base/cautions/*/finalize").hasRole("DCM_MANAGER")
-                it.requestMatchers(HttpMethod.DELETE, "$base/cautions/*").hasRole("ADMIN")
+                it.requestMatchers(HttpMethod.DELETE, "$base/cautions/*").hasAnyRole("ADMIN", "DCM_MANAGER")
                 it.requestMatchers(HttpMethod.POST, "$base/caution-dossiers/*/proroge").hasRole("DCM_MANAGER")
-                it.requestMatchers(HttpMethod.DELETE, "$base/caution-dossiers/*").hasRole("ADMIN")
+                it.requestMatchers(HttpMethod.DELETE, "$base/caution-dossiers/*").hasAnyRole("ADMIN", "DCM_MANAGER")
                 it.requestMatchers("$base/cautions/**", "$base/caution-dossiers/**").hasRole("DCM_MEMBER")
                 // Correcting a client's matricule is rarer and more sensitive than
                 // editing the rest of the fiche (it feeds document numbering and
