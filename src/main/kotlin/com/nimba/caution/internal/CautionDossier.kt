@@ -18,8 +18,8 @@ import java.util.UUID
  * generated for one client request against one appel d'offres (possibly across
  * several lots). [clientId] references the client module's aggregate by id only
  * — no JPA relationship crosses the module boundary. Member documents point
- * back through [Caution.dossierId]; the dossier itself carries only the shared
- * market context in [contentJson], keyed by `CautionFieldDefinition.key`.
+ * back through [CautionDocument.dossierId]; the dossier itself carries only the
+ * shared market context in [contentJson], keyed by `CautionFieldDefinition.key`.
  */
 @Entity
 @Table(name = "caution_dossier")
