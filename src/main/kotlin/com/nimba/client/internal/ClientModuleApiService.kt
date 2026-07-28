@@ -22,6 +22,9 @@ class ClientModuleApiService(
         if (command.matricule != null && clients.existsByMatricule(command.matricule)) {
             throw ResponseStatusException(HttpStatus.CONFLICT, "Un client existe déjà avec ce matricule")
         }
+        if (command.codeNif != null && clients.existsByCodeNif(command.codeNif)) {
+            throw ResponseStatusException(HttpStatus.CONFLICT, "Un client existe déjà avec ce numéro d'identification fiscale")
+        }
         val client =
             Client(
                 matricule = command.matricule,
@@ -55,6 +58,9 @@ class ClientModuleApiService(
         command: UpdateClientCommand,
     ): ClientInfo {
         val client = clients.findById(id).orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Client introuvable") }
+        if (command.codeNif != null && clients.existsByCodeNifAndIdNot(command.codeNif, id)) {
+            throw ResponseStatusException(HttpStatus.CONFLICT, "Un client existe déjà avec ce numéro d'identification fiscale")
+        }
         client.apply {
             raisonSociale = command.raisonSociale
             sigle = command.sigle
