@@ -13,6 +13,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
@@ -179,6 +180,42 @@ class WorkflowService(
         creditCaseIds
             .mapNotNull { id -> workflows.findByCreditCaseId(id) }
             .map { CaseWorkflowStatusResponse(it.creditCaseId, it.status) }
+
+    /** Dossier counts per lifecycle status, admin dashboard funnel. */
+    @Transactional(readOnly = true)
+    fun statusCounts(): Map<WorkflowStatus, Long> = WorkflowStatus.entries.associateWith { workflows.countByStatus(it) }
+
+    /** How many dossiers are currently awaiting action from each direction (same ownership as the queues). */
+    @Transactional(readOnly = true)
+    fun pendingCountByDepartment(): Map<Department, Long> =
+        WorkflowStatus.entries
+            .mapNotNull { status -> reviewDepartment(status)?.let { it to workflows.countByStatus(status) } }
+            .groupBy({ it.first }, { it.second })
+            .mapValues { (_, counts) -> counts.sum() }
+
+    /**
+     * Average time (hours) a dossier spends in each status before moving on, derived
+     * from the event journal (plus the workflow's own [CaseWorkflow.createdAt] for the
+     * time spent in the initial BROUILLON before the first transition). A status with
+     * no completed transition yet (including one no dossier has ever left) is absent
+     * from the result — still-open time isn't a "duration" yet.
+     */
+    @Transactional(readOnly = true)
+    fun averageHoursInStatus(): Map<WorkflowStatus, Double> {
+        val eventsByCase = events.findAll().groupBy { it.creditCaseId }
+        val hoursByStatus = mutableMapOf<WorkflowStatus, MutableList<Double>>()
+        for (workflow in workflows.findAll()) {
+            var previousStatus = WorkflowStatus.BROUILLON
+            var previousTime = workflow.createdAt
+            for (event in eventsByCase[workflow.creditCaseId].orEmpty().sortedBy { it.occurredAt }) {
+                val hours = Duration.between(previousTime, event.occurredAt).toMinutes() / 60.0
+                hoursByStatus.getOrPut(previousStatus) { mutableListOf() }.add(hours)
+                previousStatus = event.toStatus
+                previousTime = event.occurredAt
+            }
+        }
+        return hoursByStatus.mapValues { (_, hours) -> hours.average() }
+    }
 
     /** Applies the action's side effects and returns the resulting status (design §12.1). */
     private fun apply(

@@ -14,6 +14,9 @@ interface CreditCaseRepository :
 
     /** Count of credit cases in a given phase-1 status. */
     fun countByStatus(status: CreditCaseStatus): Long
+
+    /** Count of credit cases of a given product, for the admin dashboard's cross-product breakdown. */
+    fun countByProductType(productType: ProductType): Long
 }
 
 /**

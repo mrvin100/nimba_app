@@ -1,5 +1,6 @@
 package com.nimba.caution.internal
 
+import com.nimba.caution.DossierStatus
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
@@ -18,4 +19,7 @@ interface CautionDossierRepository : JpaRepository<CautionDossier, UUID> {
         clientId: UUID?,
         pageable: Pageable,
     ): Page<CautionDossier>
+
+    /** Count of dossiers in a given lifecycle status, for the admin dashboard. */
+    fun countByStatus(status: DossierStatus): Long
 }
