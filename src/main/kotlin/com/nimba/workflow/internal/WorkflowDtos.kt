@@ -1,5 +1,7 @@
 package com.nimba.workflow.internal
 
+import com.nimba.creditcase.ContractType
+import com.nimba.creditcase.ProductType
 import com.nimba.identity.Department
 import com.nimba.workflow.WorkflowAction
 import com.nimba.workflow.WorkflowStatus
@@ -40,12 +42,21 @@ data class WorkflowEventResponse(
     val occurredAt: Instant,
 )
 
-/** One dossier awaiting the caller's review, for a direction's queue. */
+/**
+ * One dossier awaiting the caller's review, for a direction's queue. Carries the
+ * same descriptive fields as `CreditCaseSummaryResponse` (product, client) so the
+ * frontend can render the queue and the full dossier list through the same table
+ * and columns, switching only the data source.
+ */
 data class QueueItemResponse(
     val creditCaseId: UUID,
     val caseNumber: String,
+    val clientId: UUID,
     val clientName: String,
+    val productType: ProductType,
+    val contractType: ContractType?,
     val status: WorkflowStatus,
+    val createdAt: Instant,
     val updatedAt: Instant,
 )
 

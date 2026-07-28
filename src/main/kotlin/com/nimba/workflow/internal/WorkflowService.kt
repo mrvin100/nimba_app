@@ -167,8 +167,12 @@ class WorkflowService(
                     QueueItemResponse(
                         creditCaseId = workflow.creditCaseId,
                         caseNumber = case.caseNumber,
+                        clientId = case.clientId,
                         clientName = case.clientName,
+                        productType = case.productType,
+                        contractType = case.contractType,
                         status = workflow.status,
+                        createdAt = case.createdAt,
                         updatedAt = workflow.updatedAt,
                     )
                 }
