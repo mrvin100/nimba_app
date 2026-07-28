@@ -1,10 +1,12 @@
 package com.nimba.signatory.internal
 
+import com.nimba.identity.Civility
 import com.nimba.identity.Department
 import com.nimba.identity.DepartmentRole
 import com.nimba.signatory.SignatoryCategory
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Size
 import java.time.Instant
 import java.util.UUID
@@ -15,6 +17,7 @@ data class SignatoryOptionResponse(
     val refId: String,
     val nom: String,
     val titre: String,
+    val civility: Civility?,
     val category: SignatoryCategory?,
 )
 
@@ -32,6 +35,7 @@ data class SignatoryResponse(
     val id: UUID,
     val nom: String,
     val titre: String,
+    val civility: Civility,
     val category: SignatoryCategory,
     val creationReason: String,
     val createdAt: Instant,
@@ -41,6 +45,7 @@ data class SignatoryResponse(
 data class SignatoryWriteRequest(
     @field:NotBlank @field:Size(max = 200) val nom: String,
     @field:NotBlank @field:Size(max = 200) val titre: String,
+    @field:NotNull val civility: Civility,
     val category: SignatoryCategory,
     @field:NotBlank @field:Size(max = 500) val creationReason: String,
     @field:Valid val authorizations: List<SignatoryAuthorizationDto> = emptyList(),
@@ -51,6 +56,7 @@ internal fun Signatory.toResponse() =
         id = requireNotNull(id),
         nom = nom,
         titre = titre,
+        civility = civility,
         category = category,
         creationReason = creationReason,
         createdAt = createdAt,

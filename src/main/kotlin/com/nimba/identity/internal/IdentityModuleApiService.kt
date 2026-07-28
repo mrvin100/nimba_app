@@ -39,4 +39,5 @@ internal fun User.toUserInfo(): UserInfo =
         fullName = fullName,
         email = email,
         titre = titre,
+        civility = civility,
     )

@@ -1,6 +1,7 @@
 package com.nimba.identity.internal
 
 import com.nimba.identity.AccountStatus
+import com.nimba.identity.Civility
 import com.nimba.identity.Department
 import com.nimba.identity.DepartmentRole
 import jakarta.persistence.CollectionTable
@@ -63,7 +64,12 @@ class User(
     @Column(name = "titre")
     var titre: String? = null
 
-    /** Whether this user chose to appear as a pickable signatory (requires [titre] to be set). */
+    /** Confirmed once on the profile screen; the printed title when [signatoryOptIn]. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "civility")
+    var civility: Civility? = null
+
+    /** Whether this user chose to appear as a pickable signatory (requires [titre] and [civility] to be set). */
     @Column(name = "signatory_opt_in", nullable = false)
     var signatoryOptIn: Boolean = false
 

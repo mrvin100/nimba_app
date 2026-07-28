@@ -23,13 +23,15 @@ class SignatoryService(
         val authorities = callerAuthorities()
         val profileOptions =
             identity.signatoryEligibleUsers().map {
-                SignatoryOptionResponse(SignatorySource.PROFILE, it.id.toString(), it.fullName, it.titre.orEmpty(), null)
+                SignatoryOptionResponse(SignatorySource.PROFILE, it.id.toString(), it.fullName, it.titre.orEmpty(), it.civility, null)
             }
         val standaloneOptions =
             signatories
                 .findAll()
                 .filter { it.isUsableBy(authorities) }
-                .map { SignatoryOptionResponse(SignatorySource.STANDALONE, it.id.toString(), it.nom, it.titre, it.category) }
+                .map {
+                    SignatoryOptionResponse(SignatorySource.STANDALONE, it.id.toString(), it.nom, it.titre, it.civility, it.category)
+                }
         return profileOptions + standaloneOptions
     }
 
@@ -43,6 +45,7 @@ class SignatoryService(
             Signatory(
                 nom = request.nom,
                 titre = request.titre,
+                civility = request.civility,
                 category = request.category,
                 creationReason = request.creationReason,
                 createdBy = currentUser.id(),
@@ -59,6 +62,7 @@ class SignatoryService(
         val signatory = requireSignatory(id)
         signatory.nom = request.nom
         signatory.titre = request.titre
+        signatory.civility = request.civility
         signatory.category = request.category
         signatory.creationReason = request.creationReason
         signatory.authorizations = request.authorizations.map { SignatoryAuthorization(it.department, it.departmentRole) }.toMutableSet()

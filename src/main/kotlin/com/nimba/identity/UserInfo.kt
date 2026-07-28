@@ -12,4 +12,5 @@ data class UserInfo(
     val fullName: String,
     val email: String,
     val titre: String?,
+    val civility: Civility?,
 )

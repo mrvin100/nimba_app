@@ -29,6 +29,7 @@ class AnalystUserDetailsService(
             passwordHash = user.passwordHash,
             avatarKey = user.avatarKey,
             titre = user.titre,
+            civility = user.civility,
             signatoryOptIn = user.signatoryOptIn,
         )
     }

@@ -1,5 +1,6 @@
 package com.nimba.signatory.internal
 
+import com.nimba.identity.Civility
 import com.nimba.identity.Department
 import com.nimba.identity.DepartmentRole
 import com.nimba.signatory.SignatoryCategory
@@ -34,6 +35,9 @@ class Signatory(
     var nom: String,
     @Column(name = "titre", nullable = false)
     var titre: String,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "civility", nullable = false)
+    var civility: Civility,
     @Enumerated(EnumType.STRING)
     @Column(name = "category", nullable = false)
     var category: SignatoryCategory,

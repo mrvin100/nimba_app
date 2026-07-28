@@ -168,6 +168,26 @@ class AccountProvisioningTest(
     }
 
     @Test
+    fun `opting in as a signatory requires both a titre and a civility`() {
+        val user = persist("signatory-optin@prov.test") { it.assign(Department.DRI, DepartmentRole.MEMBER) }
+        authenticateAs(user)
+
+        assertFailsWith<ResponseStatusException> {
+            profile.updateName(UpdateProfileRequest("Nom Complet", titre = "Directrice", signatoryOptIn = true))
+        }
+        assertFailsWith<ResponseStatusException> {
+            profile.updateName(UpdateProfileRequest("Nom Complet", civility = Civility.MADAME, signatoryOptIn = true))
+        }
+
+        val me =
+            profile.updateName(
+                UpdateProfileRequest("Nom Complet", titre = "Directrice", civility = Civility.MADAME, signatoryOptIn = true),
+            )
+        assertEquals(Civility.MADAME, me.civility)
+        assertTrue(me.signatoryOptIn)
+    }
+
+    @Test
     fun `organization settings can be read and updated`() {
         assertEquals("Nimba", organization.get().organizationName)
         val updated = organization.update(UpdateOrganizationRequest("Acme Bank", "Acme", "no-reply@acme.test"))
