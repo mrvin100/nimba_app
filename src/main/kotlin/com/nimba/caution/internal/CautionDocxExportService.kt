@@ -570,7 +570,9 @@ class CautionDocxExportService(
         rightBoldLine(document, content["destinataireNom"].orRas())
         spacer(document)
 
-        mixedParagraph(document, bold("Objet : ${content["objet"] ?: "Notification de caution"}"), alignment = ParagraphAlignment.LEFT)
+        // Fixed boilerplate on the real paper template (docs/caution/NOTIFICATION.docx) —
+        // never the tender's own subject, which appears later in the body paragraph.
+        mixedParagraph(document, bold("Objet : Notification de caution"), alignment = ParagraphAlignment.LEFT)
         mixedParagraph(document, bold("V/Réf : ${content["vReference"].orRas()}"), alignment = ParagraphAlignment.LEFT)
         spacer(document)
 

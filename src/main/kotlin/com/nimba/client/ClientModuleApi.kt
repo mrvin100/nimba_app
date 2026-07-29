@@ -21,6 +21,12 @@ interface ClientModuleApi {
         command: UpdateClientCommand,
     ): ClientInfo
 
+    /** Corrects a client's matricule (manager-gated at the controller); 404 if unknown, 409 if already taken by another client. */
+    fun updateMatricule(
+        id: UUID,
+        command: UpdateClientMatriculeCommand,
+    ): ClientInfo
+
     fun findById(id: UUID): ClientInfo?
 
     /** Batch resolve clients by id, in no particular order — lets a consumer paging a list of dossiers fetch their clients in one query. */

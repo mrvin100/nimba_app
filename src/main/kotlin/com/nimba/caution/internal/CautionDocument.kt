@@ -22,7 +22,10 @@ import java.util.UUID
  * — no JPA relationship crosses the module boundary. [referenceNumber] is
  * assigned once at creation (a single global sequence, format
  * `{sequence}-{matricule}-{documentType.code}-{date}`) and never changes. The
- * table keeps its historical name (`caution`).
+ * table keeps its historical name (`caution`). [referenceNumber] realigns the
+ * moment a client's matricule is corrected (see [com.nimba.client.ClientMatriculeCorrected])
+ * while the document is still DRAFT — frozen for good once finalized, same as
+ * the rest of the document.
  */
 @Entity
 @Table(name = "caution")
@@ -32,8 +35,8 @@ class CautionDocument(
     @Enumerated(EnumType.STRING)
     @Column(name = "document_type", nullable = false, updatable = false)
     val documentType: CautionDocumentType,
-    @Column(name = "reference_number", nullable = false, unique = true, updatable = false)
-    val referenceNumber: String,
+    @Column(name = "reference_number", nullable = false, unique = true)
+    var referenceNumber: String,
     @Column(name = "created_by", nullable = false, updatable = false)
     val createdBy: UUID,
 ) {

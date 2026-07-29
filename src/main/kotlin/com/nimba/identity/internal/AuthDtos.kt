@@ -1,5 +1,6 @@
 package com.nimba.identity.internal
 
+import com.nimba.identity.Civility
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
 
@@ -21,4 +22,7 @@ data class MeResponse(
     val admin: Boolean,
     val hasAvatar: Boolean,
     val memberships: List<MembershipDto>,
+    val titre: String?,
+    val civility: Civility?,
+    val signatoryOptIn: Boolean,
 )

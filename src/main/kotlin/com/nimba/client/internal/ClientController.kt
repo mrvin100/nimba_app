@@ -44,6 +44,13 @@ class ClientController(
         @Valid @RequestBody request: UpdateClientRequest,
     ): ClientResponse = clients.update(id, request.toCommand()).toResponse()
 
+    /** Corrects a data-entry mistake in the matricule (direction-manager gated, see security config). */
+    @PutMapping("/{id}/matricule")
+    fun updateMatricule(
+        @PathVariable id: UUID,
+        @Valid @RequestBody request: UpdateClientMatriculeRequest,
+    ): ClientResponse = clients.updateMatricule(id, request.toCommand()).toResponse()
+
     @GetMapping("/{id}")
     fun getById(
         @PathVariable id: UUID,

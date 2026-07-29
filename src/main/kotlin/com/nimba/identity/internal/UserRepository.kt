@@ -38,6 +38,9 @@ interface UserRepository : JpaRepository<User, UUID> {
     fun findByMembershipDepartments(
         @Param("departments") departments: Collection<Department>,
     ): List<User>
+
+    /** Active users who opted in as a pickable signatory (titre is enforced non-blank at opt-in time). */
+    fun findBySignatoryOptInTrueAndStatus(status: AccountStatus): List<User>
 }
 
 /**

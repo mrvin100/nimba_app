@@ -12,9 +12,12 @@ import com.nimba.catalog.ProductFamily
  * [ProductFamily] (which also spans the caution product). [family] binds the two so
  * there is a single link between a case's product and the catalogue.
  */
-enum class ProductType {
-    LEASING,
-    MC2_MUFFA,
+enum class ProductType(
+    /** Short code used in the case number (e.g. `LEA-2026-0001`) — see `CreditCaseNumberGenerator`. */
+    val code: String,
+) {
+    LEASING("LEA"),
+    MC2_MUFFA("MC2"),
     ;
 
     fun family(): ProductFamily =

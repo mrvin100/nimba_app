@@ -48,7 +48,7 @@ class CreditCaseModuleApiService(
         val saved =
             creditCases.save(
                 CreditCase(
-                    caseNumber = numberGenerator.nextCaseNumber(),
+                    caseNumber = numberGenerator.nextCaseNumber(command.productType),
                     clientId = client.id,
                     productType = command.productType,
                     contractType = contractType,

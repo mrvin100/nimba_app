@@ -4,6 +4,7 @@ import com.nimba.client.ClientInfo
 import com.nimba.client.ClientType
 import com.nimba.client.CreateClientCommand
 import com.nimba.client.UpdateClientCommand
+import com.nimba.client.UpdateClientMatriculeCommand
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
 import java.time.Instant
@@ -132,6 +133,13 @@ internal fun UpdateClientRequest.toCommand(): UpdateClientCommand =
         cotationPrecedente = cotationPrecedente,
         cotationActuelle = cotationActuelle,
     )
+
+data class UpdateClientMatriculeRequest(
+    @field:Size(max = 50, message = "50 caractères maximum")
+    val matricule: String? = null,
+)
+
+internal fun UpdateClientMatriculeRequest.toCommand(): UpdateClientMatriculeCommand = UpdateClientMatriculeCommand(matricule = matricule)
 
 data class ClientResponse(
     val id: UUID,

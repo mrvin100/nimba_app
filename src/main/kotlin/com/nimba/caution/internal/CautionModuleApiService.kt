@@ -149,9 +149,13 @@ class CautionModuleApiService(
     override fun dossierEvents(id: UUID): List<CautionDossierEventInfo> =
         dossierEvents.findByDossierIdOrderByCreatedAtDesc(id).map { it.toInfo() }
 
+    /** Only a still-fresh dossier (never finalized) may be deleted — this undoes a mistake, it does not erase official history. */
     @Transactional
     override fun deleteDossier(id: UUID) {
         val dossier = requireDossier(id)
+        if (dossier.status != DossierStatus.BROUILLON) {
+            throw ResponseStatusException(HttpStatus.CONFLICT, "Seul un dossier en brouillon peut être supprimé")
+        }
         val documentIds = cautions.findByDossierIdOrderByCreatedAtDesc(id).mapNotNull { it.id }
         if (documentIds.isNotEmpty()) documentVersions.deleteByDocumentIdIn(documentIds)
         cautions.deleteByDossierId(requireNotNull(dossier.id))
@@ -333,7 +337,7 @@ class CautionModuleApiService(
         } else if (caution.status != CautionStatus.DRAFT) {
             throw ResponseStatusException(
                 HttpStatus.CONFLICT,
-                "Seul un brouillon peut être modifié — un document finalisé est une pièce officielle",
+                "Seul un brouillon peut être modifié, un document finalisé est une pièce officielle",
             )
         }
         return caution

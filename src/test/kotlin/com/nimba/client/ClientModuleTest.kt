@@ -64,6 +64,64 @@ class ClientModuleTest(
     }
 
     @Test
+    fun `a second client cannot reuse a codeNif`() {
+        val dcm = dcmMemberId()
+        val codeNif = "NIF-${UUID.randomUUID()}"
+        clients.create(CreateClientCommand(raisonSociale = "Client A", createdBy = dcm, codeNif = codeNif))
+
+        assertFailsWith<ResponseStatusException> {
+            clients.create(CreateClientCommand(raisonSociale = "Client B", createdBy = dcm, codeNif = codeNif))
+        }
+    }
+
+    @Test
+    fun `updating a client to another client's codeNif is rejected`() {
+        val dcm = dcmMemberId()
+        val codeNif = "NIF-${UUID.randomUUID()}"
+        clients.create(CreateClientCommand(raisonSociale = "Client A", createdBy = dcm, codeNif = codeNif))
+        val clientB = clients.create(CreateClientCommand(raisonSociale = "Client B", createdBy = dcm))
+
+        assertFailsWith<ResponseStatusException> {
+            clients.update(clientB.id, UpdateClientCommand(raisonSociale = "Client B", codeNif = codeNif))
+        }
+    }
+
+    @Test
+    fun `a client keeps its own codeNif across an update`() {
+        val dcm = dcmMemberId()
+        val codeNif = "NIF-${UUID.randomUUID()}"
+        val created = clients.create(CreateClientCommand(raisonSociale = "Client A", createdBy = dcm, codeNif = codeNif))
+
+        val updated = clients.update(created.id, UpdateClientCommand(raisonSociale = "Client A corrigé", codeNif = codeNif))
+
+        assertEquals(codeNif, updated.codeNif)
+    }
+
+    @Test
+    fun `updateMatricule corrects a data-entry mistake`() {
+        val dcm = dcmMemberId()
+        val created = clients.create(CreateClientCommand(matricule = "M-WRONG", raisonSociale = "Client A", createdBy = dcm))
+
+        val corrected = clients.updateMatricule(created.id, UpdateClientMatriculeCommand("M-CORRECT"))
+
+        assertEquals("M-CORRECT", corrected.matricule)
+        assertNull(clients.findByMatricule("M-WRONG"))
+        assertEquals(corrected.id, clients.findByMatricule("M-CORRECT")?.id)
+    }
+
+    @Test
+    fun `updateMatricule cannot reuse another client's matricule`() {
+        val dcm = dcmMemberId()
+        val matricule = "M-${UUID.randomUUID()}"
+        clients.create(CreateClientCommand(matricule = matricule, raisonSociale = "Client A", createdBy = dcm))
+        val clientB = clients.create(CreateClientCommand(raisonSociale = "Client B", createdBy = dcm))
+
+        assertFailsWith<ResponseStatusException> {
+            clients.updateMatricule(clientB.id, UpdateClientMatriculeCommand(matricule))
+        }
+    }
+
+    @Test
     fun `updates a client's descriptive details without touching its matricule`() {
         val dcm = dcmMemberId()
         val matricule = "M-${UUID.randomUUID()}"

@@ -57,7 +57,7 @@ class CreditCaseListEndpointTest(
                 HttpResponse.BodyHandlers.ofString(),
             )
         assertEquals(201, response.statusCode(), "body=${response.body()}")
-        return Regex("""DOS-\d{4}-\d{4}""").find(response.body())!!.value
+        return Regex("""LEA-\d{4}-\d{4}""").find(response.body())!!.value
     }
 
     @Test

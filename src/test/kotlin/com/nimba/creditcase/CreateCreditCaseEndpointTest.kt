@@ -74,7 +74,7 @@ class CreateCreditCaseEndpointTest(
         assertEquals(201, response.statusCode(), "body=${response.body()}")
         assertContains(response.body(), "ETS OC ET FRERES")
         assertContains(response.body(), "0102386501-90")
-        assertTrue(Regex("""DOS-\d{4}-\d{4}""").containsMatchIn(response.body()), "expected a case number; body=${response.body()}")
+        assertTrue(Regex("""LEA-\d{4}-\d{4}""").containsMatchIn(response.body()), "expected a case number; body=${response.body()}")
     }
 
     @Test

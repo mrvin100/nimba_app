@@ -33,10 +33,12 @@ class Client(
      * The bank's internal client code. Optional: a client created from a migrated
      * leasing dossier may not have one yet (it is captured later), while the Caution
      * module requires it to issue a document. Unique when present (a partial unique
-     * index, so several matricule-less clients can coexist).
+     * index, so several matricule-less clients can coexist). Mutable only through
+     * [com.nimba.client.UpdateClientMatriculeCommand] (direction-manager gated at
+     * the controller) — a data-entry correction, not a routine edit.
      */
-    @Column(name = "matricule", updatable = false)
-    val matricule: String? = null,
+    @Column(name = "matricule")
+    var matricule: String? = null,
     @Column(name = "raison_sociale", nullable = false)
     var raisonSociale: String,
     @Column(name = "created_by", nullable = false, updatable = false)
