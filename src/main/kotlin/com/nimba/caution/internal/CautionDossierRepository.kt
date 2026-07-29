@@ -22,4 +22,10 @@ interface CautionDossierRepository : JpaRepository<CautionDossier, UUID> {
 
     /** Count of dossiers in a given lifecycle status, for the admin dashboard. */
     fun countByStatus(status: DossierStatus): Long
+
+    /** A client's dossiers in a given status — the matricule-realignment listener only touches BROUILLON ones. */
+    fun findByClientIdAndStatus(
+        clientId: UUID,
+        status: DossierStatus,
+    ): List<CautionDossier>
 }

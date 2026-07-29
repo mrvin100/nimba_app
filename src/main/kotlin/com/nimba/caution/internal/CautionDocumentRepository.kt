@@ -28,4 +28,10 @@ interface CautionDocumentRepository : JpaRepository<CautionDocument, UUID> {
     fun findByDossierIdOrderByCreatedAtDesc(dossierId: UUID): List<CautionDocument>
 
     fun deleteByDossierId(dossierId: UUID)
+
+    /** A client's documents in a given status — the matricule-realignment listener only touches DRAFT ones. */
+    fun findByClientIdAndStatus(
+        clientId: UUID,
+        status: CautionStatus,
+    ): List<CautionDocument>
 }

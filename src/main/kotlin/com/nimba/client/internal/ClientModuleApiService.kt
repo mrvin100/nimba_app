@@ -1,10 +1,12 @@
 package com.nimba.client.internal
 
 import com.nimba.client.ClientInfo
+import com.nimba.client.ClientMatriculeCorrected
 import com.nimba.client.ClientModuleApi
 import com.nimba.client.CreateClientCommand
 import com.nimba.client.UpdateClientCommand
 import com.nimba.client.UpdateClientMatriculeCommand
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.http.HttpStatus
@@ -17,6 +19,7 @@ import java.util.UUID
 @Service
 class ClientModuleApiService(
     private val clients: ClientRepository,
+    private val events: ApplicationEventPublisher,
 ) : ClientModuleApi {
     @Transactional
     override fun create(command: CreateClientCommand): ClientInfo {
@@ -95,8 +98,12 @@ class ClientModuleApiService(
         if (matricule != null && clients.existsByMatriculeAndIdNot(matricule, id)) {
             throw ResponseStatusException(HttpStatus.CONFLICT, "Un client existe déjà avec ce matricule")
         }
+        val previousMatricule = client.matricule
         client.matricule = matricule
         client.updatedAt = Instant.now()
+        if (previousMatricule != null && matricule != null && previousMatricule != matricule) {
+            events.publishEvent(ClientMatriculeCorrected(id, previousMatricule, matricule))
+        }
         return client.toInfo()
     }
 

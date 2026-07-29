@@ -26,8 +26,15 @@ import java.util.UUID
 class CautionDossier(
     @Column(name = "client_id", nullable = false, updatable = false)
     val clientId: UUID,
-    @Column(name = "reference_number", nullable = false, unique = true, updatable = false)
-    val referenceNumber: String,
+    /**
+     * Assigned once at creation, but not truly immutable: while the dossier is
+     * still [com.nimba.caution.DossierStatus.BROUILLON], a matricule correction
+     * on the client (see [com.nimba.client.ClientMatriculeCorrected]) realigns
+     * the matricule this carries so both stay consistent. Frozen for good once
+     * the dossier is finalized, same as everything else about it.
+     */
+    @Column(name = "reference_number", nullable = false, unique = true)
+    var referenceNumber: String,
     @Column(name = "created_by", nullable = false, updatable = false)
     val createdBy: UUID,
 ) {
