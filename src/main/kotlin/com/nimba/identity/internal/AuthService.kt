@@ -81,6 +81,9 @@ internal fun AnalystUserDetails.toMeResponse(): MeResponse =
         admin = platformAdmin,
         hasAvatar = avatarKey != null,
         memberships = memberships.map { MembershipDto(it.department.name, it.role.name) },
+        titre = titre,
+        civility = civility,
+        signatoryOptIn = signatoryOptIn,
     )
 
 internal fun User.toMeResponse(): MeResponse =
@@ -92,4 +95,7 @@ internal fun User.toMeResponse(): MeResponse =
         admin = platformAdmin,
         hasAvatar = avatarKey != null,
         memberships = memberships.map { MembershipDto(it.department.name, it.role.name) },
+        titre = titre,
+        civility = civility,
+        signatoryOptIn = signatoryOptIn,
     )

@@ -29,6 +29,7 @@ class SchedulePreviewEndpointTest(
     @Autowired private val users: UserRepository,
     @Autowired private val passwordEncoder: PasswordEncoder,
     @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val clients: com.nimba.client.ClientModuleApi,
     @Value("\${local.server.port}") private val port: Int,
 ) {
     private val boundary = "----NimbaTestBoundary"
@@ -55,7 +56,7 @@ class SchedulePreviewEndpointTest(
         creditCases
             .createCase(
                 CreateCreditCaseCommand(
-                    "Client Preview",
+                    com.nimba.seedClient(clients, "Client Preview"),
                     ProductType.LEASING,
                     "GNF",
                     analystId(),

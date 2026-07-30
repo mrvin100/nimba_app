@@ -23,4 +23,11 @@ interface IdentityModuleApi {
 
     /** The configured organisation logo, or null when none has been uploaded. */
     fun organizationLogo(): OrganizationLogo?
+
+    /**
+     * Active users who opted in, on their own profile, to appear as a pickable
+     * signatory (the signatory module's other candidates are standalone records
+     * for people without an account — see that module).
+     */
+    fun signatoryEligibleUsers(): List<UserInfo>
 }

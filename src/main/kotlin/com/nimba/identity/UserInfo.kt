@@ -11,4 +11,6 @@ data class UserInfo(
     val id: UUID,
     val fullName: String,
     val email: String,
+    val titre: String?,
+    val civility: Civility?,
 )

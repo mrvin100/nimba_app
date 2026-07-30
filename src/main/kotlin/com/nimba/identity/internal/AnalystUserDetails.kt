@@ -1,6 +1,7 @@
 package com.nimba.identity.internal
 
 import com.nimba.identity.AccountStatus
+import com.nimba.identity.Civility
 import com.nimba.shared.AuthenticatedUser
 import org.springframework.security.core.GrantedAuthority
 import org.springframework.security.core.authority.SimpleGrantedAuthority
@@ -24,6 +25,9 @@ class AnalystUserDetails(
     private val email: String,
     private val passwordHash: String?,
     val avatarKey: String? = null,
+    val titre: String? = null,
+    val civility: Civility? = null,
+    val signatoryOptIn: Boolean = false,
 ) : UserDetails,
     AuthenticatedUser {
     override fun getAuthorities(): Collection<GrantedAuthority> {

@@ -28,7 +28,7 @@ object CaseTypePolicies {
             CaseTypePolicy(
                 productType = ProductType.LEASING,
                 contractType = ContractType.AVEC_CONTRAT,
-                label = "Leasing — avec contrat",
+                label = "Leasing (avec contrat)",
                 requiredDocuments = setOf(DocumentKind.TA, DocumentKind.FA),
                 scheduleFormat = ScheduleFormat.LEASING,
                 faVariant = FaVariant.LEASING_AVEC_CONTRAT,
@@ -37,7 +37,7 @@ object CaseTypePolicies {
             CaseTypePolicy(
                 productType = ProductType.LEASING,
                 contractType = ContractType.SANS_CONTRAT,
-                label = "Leasing — sans contrat",
+                label = "Leasing (sans contrat)",
                 requiredDocuments = setOf(DocumentKind.TA, DocumentKind.FA),
                 scheduleFormat = ScheduleFormat.LEASING,
                 faVariant = FaVariant.LEASING_SANS_CONTRAT,

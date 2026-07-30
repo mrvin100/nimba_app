@@ -39,6 +39,7 @@ class TradeRegenerationTest(
     @Autowired private val users: UserRepository,
     @Autowired private val passwordEncoder: PasswordEncoder,
     @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val clients: com.nimba.client.ClientModuleApi,
     @Autowired private val schedules: AmortizationScheduleRepository,
     @Autowired private val trades: TradeRepository,
     @Value("\${local.server.port}") private val port: Int,
@@ -106,7 +107,7 @@ class TradeRegenerationTest(
             creditCases
                 .createCase(
                     CreateCreditCaseCommand(
-                        "ETS OC ET FRERES",
+                        com.nimba.seedClient(clients, "ETS OC ET FRERES"),
                         ProductType.LEASING,
                         "GNF",
                         analystId(),

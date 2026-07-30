@@ -29,6 +29,7 @@ class GuaranteeEndpointTest(
     @Autowired private val users: UserRepository,
     @Autowired private val passwordEncoder: PasswordEncoder,
     @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val clients: com.nimba.client.ClientModuleApi,
     @Value("\${local.server.port}") private val port: Int,
 ) {
     private fun member(
@@ -96,7 +97,7 @@ class GuaranteeEndpointTest(
         creditCases
             .createCase(
                 CreateCreditCaseCommand(
-                    "Client Garanties HTTP",
+                    com.nimba.seedClient(clients, "Client Garanties HTTP"),
                     ProductType.LEASING,
                     "GNF",
                     driId,

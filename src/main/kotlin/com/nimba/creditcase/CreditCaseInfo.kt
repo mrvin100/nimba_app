@@ -11,6 +11,9 @@ import java.util.UUID
 data class CreditCaseInfo(
     val id: UUID,
     val caseNumber: String,
+    /** The linked client (the `client` module's aggregate). */
+    val clientId: UUID,
+    /** The linked client's name, resolved from the client record — the single source. */
     val clientName: String,
     val productType: ProductType,
     /** Set only when [productType] is LEASING. */

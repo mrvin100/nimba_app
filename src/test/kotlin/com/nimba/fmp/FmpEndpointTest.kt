@@ -40,6 +40,7 @@ class FmpEndpointTest(
     @Autowired private val users: UserRepository,
     @Autowired private val passwordEncoder: PasswordEncoder,
     @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val clients: com.nimba.client.ClientModuleApi,
     @Autowired private val analysisSheets: AnalysisSheetModuleApi,
     @Autowired private val schedules: AmortizationScheduleRepository,
     @Autowired private val workflow: WorkflowService,
@@ -91,7 +92,13 @@ class FmpEndpointTest(
         val caseId =
             creditCases
                 .createCase(
-                    CreateCreditCaseCommand("Client FMP HTTP", ProductType.LEASING, "GNF", driId, contractType = ContractType.AVEC_CONTRAT),
+                    CreateCreditCaseCommand(
+                        com.nimba.seedClient(clients, "Client FMP HTTP"),
+                        ProductType.LEASING,
+                        "GNF",
+                        driId,
+                        contractType = ContractType.AVEC_CONTRAT,
+                    ),
                 ).id
         val line =
             AmortizationScheduleLine(

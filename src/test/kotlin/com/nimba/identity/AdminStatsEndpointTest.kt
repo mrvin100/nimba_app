@@ -64,7 +64,7 @@ class AdminStatsEndpointTest(
     }
 
     @Test
-    fun `credit-case stats report totals and a per-status breakdown`() {
+    fun `credit-case stats report totals, a per-status and a per-product breakdown`() {
         val admin = adminClient("stats-admin2@nimba.test")
 
         val response = send(admin, req("/api/v1/admin/stats/dossiers").GET().build())
@@ -73,6 +73,32 @@ class AdminStatsEndpointTest(
         assertContains(response.body(), "\"total\"")
         assertContains(response.body(), "EN_ATTENTE_AMORTISSEMENT")
         assertContains(response.body(), "TRADES_GENERES")
+        assertContains(response.body(), "\"byProductType\"")
+        assertContains(response.body(), "LEASING")
+    }
+
+    @Test
+    fun `caution stats report totals and a per-status breakdown`() {
+        val admin = adminClient("stats-admin4@nimba.test")
+
+        val response = send(admin, req("/api/v1/admin/stats/cautions").GET().build())
+
+        assertEquals(200, response.statusCode(), response.body())
+        assertContains(response.body(), "\"total\"")
+        assertContains(response.body(), "\"byStatus\"")
+        assertContains(response.body(), "BROUILLON")
+    }
+
+    @Test
+    fun `workflow stats report status counts, department load and average durations`() {
+        val admin = adminClient("stats-admin5@nimba.test")
+
+        val response = send(admin, req("/api/v1/admin/stats/workflow").GET().build())
+
+        assertEquals(200, response.statusCode(), response.body())
+        assertContains(response.body(), "\"byStatus\"")
+        assertContains(response.body(), "\"pendingByDepartment\"")
+        assertContains(response.body(), "\"averageDurationByStatus\"")
     }
 
     @Test
@@ -104,5 +130,8 @@ class AdminStatsEndpointTest(
         )
 
         assertEquals(403, send(member, req("/api/v1/admin/stats/users").GET().build()).statusCode())
+        assertEquals(403, send(member, req("/api/v1/admin/stats/dossiers").GET().build()).statusCode())
+        assertEquals(403, send(member, req("/api/v1/admin/stats/cautions").GET().build()).statusCode())
+        assertEquals(403, send(member, req("/api/v1/admin/stats/workflow").GET().build()).statusCode())
     }
 }

@@ -1,14 +1,22 @@
-package com.nimba.creditcase
+package com.nimba.client
 
 import java.time.LocalDate
 
-/** Request to replace a case's client-identity details (see [ClientIdentityInfo]). */
-data class UpdateClientIdentityCommand(
+/**
+ * Replaces a client's descriptive details wholesale. Does not touch [matricule] —
+ * a data-entry correction to it is a separate, more tightly gated action, see
+ * [UpdateClientMatriculeCommand].
+ */
+data class UpdateClientCommand(
+    val raisonSociale: String,
+    val sigle: String? = null,
     val formeJuridique: String? = null,
     val dateCreation: LocalDate? = null,
     val adressePhysique: String? = null,
     val activiteDeBase: String? = null,
     val codeNif: String? = null,
+    val rccm: String? = null,
+    val accountNumber: String? = null,
     val principalDirigeant: String? = null,
     val dateEntreeRelation: LocalDate? = null,
     val dateDerniereVisite: LocalDate? = null,

@@ -11,5 +11,8 @@ interface CaseWorkflowRepository : JpaRepository<CaseWorkflow, UUID> {
 
     fun findByStatus(status: WorkflowStatus): List<CaseWorkflow>
 
+    /** Count of dossiers currently in a given lifecycle status, for the admin dashboard funnel. */
+    fun countByStatus(status: WorkflowStatus): Long
+
     fun deleteByCreditCaseId(creditCaseId: UUID)
 }

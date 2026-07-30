@@ -27,6 +27,14 @@ logging:
     rollingpolicy:
       max-file-size: ${LOG_MAX_FILE_SIZE:10MB}
       max-history: ${LOG_MAX_HISTORY:30}
+  level:
+    # One-time Hibernate/Spring ORM startup notices (LoadTimeWeaver absence,
+    # connection-pool info dump, no-JTA-platform) — expected in every boot of this
+    # stack (resource-local transactions, no weaving, Hikari pool) and add no
+    # diagnostic value once known, so they are demoted below the console threshold.
+    org.hibernate.orm.connections.pooling: WARN
+    org.hibernate.orm.core: WARN
+    org.springframework.orm.jpa.persistenceunit.SpringPersistenceUnitInfo: WARN
 
 spring:
   # Import the local .env (same file Docker Compose reads) so `./gradlew bootRun`

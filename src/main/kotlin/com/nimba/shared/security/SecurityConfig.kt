@@ -172,6 +172,33 @@ class SecurityConfig(
                 // fall through to the GET rule above, already open to every reviewer.
                 // Matched before the DRI-only rule for the same reason as workflow.
                 it.requestMatchers("$base/credit-cases/*/pv/**", "$base/credit-cases/*/fmp/**").hasRole("DCM_MEMBER")
+                // The Caution module (SMS, ACF...) backs DCM's tender-guarantee
+                // business — DCM-only. Finalizing a document into an official record,
+                // and reopening a dossier for correction, are reserved to a DCM manager;
+                // the role hierarchy lets a manager pass the member rules that follow.
+                // Matched before the member catch-all. Deleting a document or a whole
+                // dossier is reserved to a DCM manager or a platform admin — the caution
+                // service itself still only allows it while the dossier is BROUILLON, so
+                // nothing already finalized/sent can ever be touched this way.
+                // ROLE_ADMIN is orthogonal to the department hierarchy, so hasAnyRole
+                // covers both without one falling through the other.
+                it.requestMatchers(HttpMethod.POST, "$base/cautions/*/finalize").hasRole("DCM_MANAGER")
+                it.requestMatchers(HttpMethod.DELETE, "$base/cautions/*").hasAnyRole("ADMIN", "DCM_MANAGER")
+                it.requestMatchers(HttpMethod.POST, "$base/caution-dossiers/*/proroge").hasRole("DCM_MANAGER")
+                it.requestMatchers(HttpMethod.DELETE, "$base/caution-dossiers/*").hasAnyRole("ADMIN", "DCM_MANAGER")
+                it.requestMatchers("$base/cautions/**", "$base/caution-dossiers/**").hasRole("DCM_MEMBER")
+                // Correcting a client's matricule is rarer and more sensitive than
+                // editing the rest of the fiche (it feeds document numbering and
+                // identity matching across every product) — reserved to a direction
+                // manager, either direction, unlike the general update below.
+                // Matched before it for the same reason as every other manager-gated
+                // action in this file.
+                it.requestMatchers(HttpMethod.PUT, "$base/clients/*/matricule").hasAnyRole("DRI_MANAGER", "DCM_MANAGER")
+                // The client registry is the single source of client identity, shared
+                // by both the DRI's credit dossiers and the DCM's cautions, so both
+                // directions read and create clients (a DRI opens a leasing dossier
+                // against a client; a DCM issues a caution for one).
+                it.requestMatchers("$base/clients/**").hasAnyRole("DRI_MEMBER", "DCM_MEMBER")
                 // Constituting the dossier (create/update, TA upload, FA edit/publish,
                 // trade generation) belongs to the DRI direction. The role hierarchy
                 // lets a DRI manager pass this check.

@@ -135,7 +135,7 @@ class AnalysisSheetModuleApiService(
         if (!unpublishGate.canUnpublish(creditCaseId)) {
             throw ResponseStatusException(
                 HttpStatus.CONFLICT,
-                "Le dossier a déjà été soumis à la revue — la fiche ne peut plus être dépubliée par le DRI",
+                "Le dossier a déjà été soumis à la revue, la fiche ne peut plus être dépubliée par le DRI",
             )
         }
         sheet.status = AnalysisSheetStatus.DRAFT

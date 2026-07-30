@@ -1,5 +1,6 @@
 package com.nimba.identity.internal
 
+import com.nimba.identity.AccountStatus
 import com.nimba.identity.Department
 import com.nimba.identity.IdentityModuleApi
 import com.nimba.identity.OrganizationLogo
@@ -26,6 +27,10 @@ class IdentityModuleApiService(
 
     @Transactional(readOnly = true)
     override fun organizationLogo(): OrganizationLogo? = logos.find()?.let { OrganizationLogo(it.bytes, it.contentType) }
+
+    @Transactional(readOnly = true)
+    override fun signatoryEligibleUsers(): List<UserInfo> =
+        users.findBySignatoryOptInTrueAndStatus(AccountStatus.ACTIVE).map { it.toUserInfo() }
 }
 
 internal fun User.toUserInfo(): UserInfo =
@@ -33,4 +38,6 @@ internal fun User.toUserInfo(): UserInfo =
         id = requireNotNull(id),
         fullName = fullName,
         email = email,
+        titre = titre,
+        civility = civility,
     )

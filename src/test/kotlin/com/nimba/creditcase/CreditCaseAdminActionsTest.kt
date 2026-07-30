@@ -37,6 +37,7 @@ class CreditCaseAdminActionsTest(
     @Autowired private val users: UserRepository,
     @Autowired private val passwordEncoder: PasswordEncoder,
     @Autowired private val creditCases: CreditCaseModuleApi,
+    @Autowired private val clients: com.nimba.client.ClientModuleApi,
     @Autowired private val schedules: AmortizationScheduleRepository,
     @Autowired private val trades: TradeRepository,
     @Value("\${local.server.port}") private val port: Int,
@@ -93,7 +94,13 @@ class CreditCaseAdminActionsTest(
     private fun newCase(name: String): UUID =
         creditCases
             .createCase(
-                CreateCreditCaseCommand(name, ProductType.LEASING, "GNF", analystId(), contractType = ContractType.AVEC_CONTRAT),
+                CreateCreditCaseCommand(
+                    com.nimba.seedClient(clients, name),
+                    ProductType.LEASING,
+                    "GNF",
+                    analystId(),
+                    contractType = ContractType.AVEC_CONTRAT,
+                ),
             ).id
 
     private fun uploadSchedule(
