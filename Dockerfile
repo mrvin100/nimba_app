@@ -21,6 +21,14 @@ WORKDIR /app
 
 # Run as a non-root user
 RUN groupadd --system tum && useradd --system --gid tum --no-create-home tum
+
+# Pre-create the writable dirs for the rotated log file and the CSV audit
+# storage, owned by the runtime user. When infra/docker-compose.yml mounts named
+# volumes at these paths, Docker copies this pre-owned content into the volume on
+# first creation, so `tum` can still write there instead of hitting a directory
+# Docker would otherwise create as root.
+RUN mkdir -p /app/logs /app/storage && chown -R tum:tum /app/logs /app/storage
+
 USER tum
 
 COPY --from=builder /app/build/libs/*.jar app.jar
