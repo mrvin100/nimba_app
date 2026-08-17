@@ -13,6 +13,7 @@ data class CautionDossierInfo(
     val id: UUID,
     val clientId: UUID,
     val referenceNumber: String,
+    val sequence: Int,
     val status: DossierStatus,
     val version: Int,
     val content: Map<String, String>,

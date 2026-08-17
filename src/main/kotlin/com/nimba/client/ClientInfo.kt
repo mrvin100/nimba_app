@@ -24,7 +24,6 @@ data class ClientInfo(
     val activiteDeBase: String?,
     val codeNif: String?,
     val rccm: String?,
-    val accountNumber: String?,
     val principalDirigeant: String?,
     val dateEntreeRelation: LocalDate?,
     val dateDerniereVisite: LocalDate?,

@@ -19,13 +19,16 @@ import java.util.UUID
  * One document generated within a dossier (Caution de Soumission, Attestation
  * de Capacité Financière, Attestation de Facilité de Crédit, Avenant de
  * Prorogation…). [clientId] references the client module's aggregate by id only
- * — no JPA relationship crosses the module boundary. [referenceNumber] is
- * assigned once at creation (a single global sequence, format
- * `{sequence}-{matricule}-{documentType.code}-{date}`) and never changes. The
- * table keeps its historical name (`caution`). [referenceNumber] realigns the
- * moment a client's matricule is corrected (see [com.nimba.client.ClientMatriculeCorrected])
- * while the document is still DRAFT — frozen for good once finalized, same as
- * the rest of the document.
+ * — no JPA relationship crosses the module boundary. [referenceNumber]
+ * (format `{sequence}-{documentType.code}-{date}`; does not embed the client's
+ * matricule — see [CautionClientSnapshot] for the client identity actually
+ * captured) and [sequence] are assigned once at creation and stay editable
+ * (together) while the document is still editable, EXCEPT a PRO: it carries no
+ * series of its own (it is the same Caution de Soumission with revised dates),
+ * so it copies its origin SMS's [referenceNumber] and [sequence] verbatim (see
+ * [com.nimba.caution.internal.CautionModuleApiService.create]). Frozen for
+ * good once finalized, same as the rest of the document. The table keeps its
+ * historical name (`caution`).
  */
 @Entity
 @Table(name = "caution")
@@ -35,8 +38,16 @@ class CautionDocument(
     @Enumerated(EnumType.STRING)
     @Column(name = "document_type", nullable = false, updatable = false)
     val documentType: CautionDocumentType,
-    @Column(name = "reference_number", nullable = false, unique = true)
+    @Column(name = "reference_number", nullable = false)
     var referenceNumber: String,
+    /**
+     * The 5-digit series number embedded in [referenceNumber], entered by the
+     * analyst (a PRO copies its origin's). Editable together with
+     * [referenceNumber] while the document is still editable, frozen once
+     * finalized.
+     */
+    @Column(name = "sequence", nullable = false)
+    var sequence: Int,
     @Column(name = "created_by", nullable = false, updatable = false)
     val createdBy: UUID,
 ) {

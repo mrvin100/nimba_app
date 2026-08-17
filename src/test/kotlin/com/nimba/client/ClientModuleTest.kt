@@ -40,7 +40,6 @@ class ClientModuleTest(
                     createdBy = dcm,
                     sigle = "G-TRAF +",
                     rccm = "GN.2025.B.07118",
-                    accountNumber = "021 001 0103804401 34",
                     agence = "Kaloum",
                 ),
             )

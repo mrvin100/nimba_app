@@ -43,7 +43,6 @@ class ClientModuleApiService(
                 activiteDeBase = command.activiteDeBase
                 codeNif = command.codeNif
                 rccm = command.rccm
-                accountNumber = command.accountNumber
                 principalDirigeant = command.principalDirigeant
                 dateEntreeRelation = command.dateEntreeRelation
                 dateDerniereVisite = command.dateDerniereVisite
@@ -74,7 +73,6 @@ class ClientModuleApiService(
             activiteDeBase = command.activiteDeBase
             codeNif = command.codeNif
             rccm = command.rccm
-            accountNumber = command.accountNumber
             principalDirigeant = command.principalDirigeant
             dateEntreeRelation = command.dateEntreeRelation
             dateDerniereVisite = command.dateDerniereVisite
@@ -133,7 +131,6 @@ private fun Client.toInfo(): ClientInfo =
         activiteDeBase = activiteDeBase,
         codeNif = codeNif,
         rccm = rccm,
-        accountNumber = accountNumber,
         principalDirigeant = principalDirigeant,
         dateEntreeRelation = dateEntreeRelation,
         dateDerniereVisite = dateDerniereVisite,

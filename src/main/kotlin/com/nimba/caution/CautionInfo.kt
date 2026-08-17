@@ -22,6 +22,7 @@ data class CautionInfo(
     val dossierId: UUID?,
     val documentType: CautionDocumentType,
     val referenceNumber: String,
+    val sequence: Int,
     val status: CautionStatus,
     val content: Map<String, String>,
     /**

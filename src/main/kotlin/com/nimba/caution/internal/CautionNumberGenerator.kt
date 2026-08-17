@@ -1,7 +1,6 @@
 package com.nimba.caution.internal
 
 import com.nimba.caution.CautionDocumentType
-import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
@@ -9,75 +8,57 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 /**
- * Generates a caution's reference number:
- * `{sequence}-{matricule}-{documentType}-{date}` (e.g. `04370-038044-SMS-11-02-26`).
- * The sequence is a single global counter shared by every document type AND
- * every dossier — confirmed against the bank's real references (a SMS and an
- * ACF for the same client sat 19 apart) — produced by an atomic upsert on a
- * dedicated counter row, the same technique as
- * [com.nimba.creditcase.internal.CreditCaseNumberGenerator], so concurrent
- * creations cannot collide or skip.
+ * Formats a caution's reference number, `{sequence}-{documentType}-{date}`
+ * (e.g. `04370-SMS-11-02-26`), and a dossier's, `DOS-{date}-{sequence}`
+ * (e.g. `DOS-11-02-26-04370`). Neither embeds the client's matricule: the
+ * reference identifies the document/dossier itself within its own series, not
+ * the client (see [CautionClientSnapshot] for the client identity actually
+ * captured on a document).
  *
- * A dossier's own reference reorders the same fields to `{matricule}-DOS-{date}-{sequence}`
- * instead — matricule first so dossiers for the same client sort and scan
- * together, sequence last since it is purely a same-day disambiguator here
- * (a dossier has no paper precedent to match, unlike a caution document).
- *
- * [startingSequence] lets the very first caution ever created continue the
- * bank's own pre-existing paper numbering instead of restarting at 1 — it
- * only has an effect the first time (the INSERT branch); once the counter
- * row exists, every later call falls into the ON CONFLICT branch and simply
- * increments, ignoring the parameter, exactly as the plain sequential logic
- * requires from then on.
+ * Unlike a plain auto-increment, [sequence] is never assigned here: SMS, ACF,
+ * AFC and the dossier each run their own independent series, and the DCM
+ * analyst enters the number themselves (locked once finalized, same as the
+ * rest of the document) rather than the platform silently picking one. This
+ * class only formats the string and suggests the next free value per series
+ * ([suggestNextSequence]/[suggestNextDossierSequence]) — the actual value used
+ * comes from the create/update request, validated for uniqueness within its
+ * series by the database constraint (`uq_caution_type_sequence`,
+ * `uq_caution_dossier_sequence`).
  */
 @Component
 class CautionNumberGenerator(
-    private val jdbcClient: JdbcClient,
+    private val documents: CautionDocumentRepository,
+    private val dossiers: CautionDossierRepository,
     private val clock: Clock,
 ) {
     private val dateFormat = DateTimeFormatter.ofPattern("dd-MM-uu")
 
-    @Transactional
-    fun nextReferenceNumber(
-        matricule: String,
+    fun referenceNumber(
+        sequence: Int,
         documentType: CautionDocumentType,
-        startingSequence: Int? = null,
     ): String {
-        val sequence = nextSequence(startingSequence)
         val date = LocalDate.now(clock).format(dateFormat)
-        return "%05d-%s-%s-%s".format(sequence, matricule, documentType.code, date)
+        return "%05d-%s-%s".format(sequence, documentType.code, date)
     }
 
-    /** A dossier's reference, drawn from the same global sequence as its documents, with a `DOS` code. */
-    @Transactional
-    fun nextDossierReferenceNumber(
-        matricule: String,
-        startingSequence: Int? = null,
-    ): String {
-        val sequence = nextSequence(startingSequence)
+    fun dossierReferenceNumber(sequence: Int): String {
         val date = LocalDate.now(clock).format(dateFormat)
-        return "%s-%s-%s-%05d".format(matricule, DOSSIER_CODE, date, sequence)
+        return "%s-%s-%05d".format(DOSSIER_CODE, date, sequence)
     }
 
-    private fun nextSequence(startingSequence: Int?): Int =
-        jdbcClient
-            .sql(
-                """
-                INSERT INTO caution_counter (id, last_value) VALUES (1, :start)
-                ON CONFLICT (id) DO UPDATE SET last_value = caution_counter.last_value + 1
-                RETURNING last_value
-                """.trimIndent(),
-            ).param("start", startingSequence ?: 1)
-            .query(Int::class.java)
-            .single()
+    /** A document reference with only its leading sequence segment swapped, so an edit never disturbs the type/date it was issued with. */
+    fun withSequence(
+        referenceNumber: String,
+        sequence: Int,
+    ): String = "%05d-%s".format(sequence, referenceNumber.substringAfter('-'))
 
-    /** Whether any caution has ever been created — the frontend only offers [nextReferenceNumber]'s starting-sequence override before this becomes true. */
+    /** The next free number in [documentType]'s own series — a suggestion only, the analyst may enter any other free value. */
     @Transactional(readOnly = true)
-    fun isInitialized(): Boolean =
-        jdbcClient
-            .sql("SELECT count(*) FROM caution_counter WHERE id = 1")
-            .query(Int::class.java)
-            .single() > 0
+    fun suggestNextSequence(documentType: CautionDocumentType): Int = (documents.maxSequence(documentType) ?: 0) + 1
+
+    /** The next free number in the dossier series. */
+    @Transactional(readOnly = true)
+    fun suggestNextDossierSequence(): Int = (dossiers.maxSequence() ?: 0) + 1
 
     private companion object {
         const val DOSSIER_CODE = "DOS"

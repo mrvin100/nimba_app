@@ -73,9 +73,6 @@ class Client(
     @Column(name = "rccm")
     var rccm: String? = null
 
-    @Column(name = "account_number")
-    var accountNumber: String? = null
-
     @Column(name = "principal_dirigeant")
     var principalDirigeant: String? = null
 
