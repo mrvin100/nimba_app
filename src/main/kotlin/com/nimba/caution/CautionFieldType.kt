@@ -68,6 +68,7 @@ object CautionFieldRegistry {
             CautionFieldDefinition("beneficiaire", "Bénéficiaire (Maître d'ouvrage)", CautionFieldType.TEXT),
             CautionFieldDefinition("referenceAppelOffres", "Référence de l'appel d'offres", CautionFieldType.TEXT),
             CautionFieldDefinition("objetMarche", "Objet du marché", CautionFieldType.TEXT),
+            CautionFieldDefinition("numeroCompte", "Numéro de compte", CautionFieldType.TEXT),
             CautionFieldDefinition("dateEmission", "Date d'émission", CautionFieldType.DATE),
             CautionFieldDefinition("signataire1Civilite", "Civilité du signataire 1", CautionFieldType.CIVILITY, optional = true),
             CautionFieldDefinition("signataire1Nom", "Nom complet du signataire 1", CautionFieldType.TEXT),
@@ -93,9 +94,11 @@ object CautionFieldRegistry {
                 ),
             CautionDocumentType.ACF to emptyList(),
             CautionDocumentType.AFC to emptyList(),
+            // No "référence de la caution d'origine" field: a PRO carries that SMS's
+            // reference number verbatim (see CautionModuleApiService.resolveProReference),
+            // so asking for it again as free text would just duplicate it.
             CautionDocumentType.PRO to
                 listOf(
-                    CautionFieldDefinition("cautionOrigineReference", "Référence de la caution d'origine", CautionFieldType.TEXT),
                     CautionFieldDefinition("cautionOrigineDate", "Date d'émission de la caution d'origine", CautionFieldType.DATE),
                     CautionFieldDefinition("nouvelleDateExpiration", "Nouvelle date d'expiration", CautionFieldType.DATE),
                 ),

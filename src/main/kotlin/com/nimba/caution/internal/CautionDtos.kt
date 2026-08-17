@@ -27,9 +27,11 @@ data class CreateCautionRequest(
     @field:NotNull
     val documentType: CautionDocumentType,
     val content: Map<String, String> = emptyMap(),
-    /** Only takes effect for the very first caution ever created — see `CautionNumberGenerator`'s KDoc. */
+    /** The analyst-entered number in [documentType]'s own series; required unless [documentType] is PRO. */
     @field:Positive
-    val startingReferenceSequence: Int? = null,
+    val sequence: Int? = null,
+    /** Required for a PRO: the SMS document (in the same dossier) it prorogates. */
+    val originDocumentId: UUID? = null,
     /** The dossier this document belongs to, or null when created standalone. */
     val dossierId: UUID? = null,
 )
@@ -40,17 +42,21 @@ internal fun CreateCautionRequest.toCommand(createdBy: UUID): CreateCautionComma
         documentType = documentType,
         content = content,
         createdBy = createdBy,
-        startingReferenceSequence = startingReferenceSequence,
+        sequence = sequence,
+        originDocumentId = originDocumentId,
         dossierId = dossierId,
     )
 
 data class UpdateCautionRequest(
     val content: Map<String, String> = emptyMap(),
+    /** Corrects the reference number's series value while still editable; null leaves it unchanged. */
+    @field:Positive
+    val sequence: Int? = null,
     /** Journaled in the document's history (used notably for a change made during a prorogation). */
     val reason: String? = null,
 )
 
-internal fun UpdateCautionRequest.toCommand(): UpdateCautionCommand = UpdateCautionCommand(content, reason)
+internal fun UpdateCautionRequest.toCommand(): UpdateCautionCommand = UpdateCautionCommand(content, sequence, reason)
 
 data class DocumentVersionResponse(
     val id: UUID,
@@ -76,6 +82,7 @@ data class CautionResponse(
     val clientId: UUID,
     val documentType: CautionDocumentType,
     val referenceNumber: String,
+    val sequence: Int,
     val status: CautionStatus,
     val content: Map<String, String>,
     val clientSnapshot: CautionClientSnapshotInfo?,
@@ -90,6 +97,7 @@ internal fun CautionInfo.toResponse(): CautionResponse =
         clientId = clientId,
         documentType = documentType,
         referenceNumber = referenceNumber,
+        sequence = sequence,
         status = status,
         content = content,
         clientSnapshot = clientSnapshot,
@@ -144,16 +152,18 @@ internal fun documentTypeResponses(): List<CautionDocumentTypeResponse> =
         )
     }
 
-data class ReferenceSequenceStatusResponse(
-    val initialized: Boolean,
+/** The next free number in a series, so the create form can pre-fill its editable sequence field. */
+data class SuggestedSequenceResponse(
+    val sequence: Int,
 )
 
 data class CreateDossierRequest(
     @field:NotNull
     val clientId: UUID,
     val content: Map<String, String> = emptyMap(),
+    @field:NotNull
     @field:Positive
-    val startingReferenceSequence: Int? = null,
+    val sequence: Int,
 )
 
 internal fun CreateDossierRequest.toCommand(createdBy: UUID): CreateDossierCommand =
@@ -161,7 +171,7 @@ internal fun CreateDossierRequest.toCommand(createdBy: UUID): CreateDossierComma
         clientId = clientId,
         content = content,
         createdBy = createdBy,
-        startingReferenceSequence = startingReferenceSequence,
+        sequence = sequence,
     )
 
 data class UpdateDossierRequest(
@@ -198,6 +208,7 @@ data class DossierResponse(
     val id: UUID,
     val clientId: UUID,
     val referenceNumber: String,
+    val sequence: Int,
     val status: DossierStatus,
     val version: Int,
     val content: Map<String, String>,
@@ -210,6 +221,7 @@ internal fun CautionDossierInfo.toResponse(): DossierResponse =
         id = id,
         clientId = clientId,
         referenceNumber = referenceNumber,
+        sequence = sequence,
         status = status,
         version = version,
         content = content,

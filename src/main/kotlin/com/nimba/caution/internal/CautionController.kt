@@ -42,10 +42,11 @@ class CautionController(
     @GetMapping("/document-types")
     fun documentTypes(): List<CautionDocumentTypeResponse> = documentTypeResponses()
 
-    /** Whether the create form should still offer a starting-sequence override (only before the very first caution ever created). */
-    @GetMapping("/reference-sequence-status")
-    fun referenceSequenceStatus(): ReferenceSequenceStatusResponse =
-        ReferenceSequenceStatusResponse(cautions.referenceSequenceInitialized())
+    /** The next free number in [documentType]'s own series — pre-fills the create form's editable sequence field. */
+    @GetMapping("/next-sequence")
+    fun nextSequence(
+        @RequestParam documentType: CautionDocumentType,
+    ): SuggestedSequenceResponse = SuggestedSequenceResponse(cautions.suggestNextSequence(documentType))
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)

@@ -81,7 +81,7 @@ class CautionDocxExportService(
         // Resolve the document's effective content: it inherits its dossier's common fields and overrides with its own.
         val caution = resolveEffective(stored)
         // A finalized caution carries its frozen snapshot; a draft preview reads the client live.
-        val snapshot = caution.clientSnapshot ?: liveSnapshot(caution.clientId)
+        val snapshot = caution.clientSnapshot ?: liveSnapshot(caution.clientId, caution.content["numeroCompte"])
 
         val document = XWPFDocument()
         setUpPage(document)
@@ -115,8 +115,16 @@ class CautionDocxExportService(
         return caution.copy(content = CautionFieldRegistry.effectiveContent(common, caution.content))
     }
 
-    /** The live client record projected onto the same shape as the frozen snapshot, for draft previews. */
-    private fun liveSnapshot(clientId: UUID): CautionClientSnapshotInfo {
+    /**
+     * The live client record projected onto the same shape as the frozen snapshot,
+     * for draft previews. [accountNumber] is not part of the client record: it is
+     * the dossier's (or standalone document's) own "numeroCompte" common field,
+     * resolved by the caller from the content it already has in hand.
+     */
+    private fun liveSnapshot(
+        clientId: UUID,
+        accountNumber: String?,
+    ): CautionClientSnapshotInfo {
         val client = clients.getOrThrow(clientId)
         return CautionClientSnapshotInfo(
             // A caution can only exist for a client that had a matricule at issuance
@@ -126,7 +134,7 @@ class CautionDocxExportService(
             sigle = client.sigle,
             adressePhysique = client.adressePhysique,
             rccm = client.rccm,
-            accountNumber = client.accountNumber,
+            accountNumber = accountNumber,
             agence = client.agence,
         )
     }
@@ -141,7 +149,7 @@ class CautionDocxExportService(
         val dossier =
             cautions.findDossier(dossierId)
                 ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Dossier introuvable")
-        val snapshot = liveSnapshot(dossier.clientId)
+        val snapshot = liveSnapshot(dossier.clientId, dossier.content["numeroCompte"])
 
         val document = XWPFDocument()
         setUpPage(document)
@@ -503,7 +511,7 @@ class CautionDocxExportService(
         mixedParagraph(
             document,
             plain("Faisant suite à la caution de soumission N° "),
-            bold(c["cautionOrigineReference"].orRas()),
+            bold(caution.referenceNumber),
             plain(" émise le "),
             bold(fmtLong(c["cautionOrigineDate"])),
             plain(" en faveur de "),
@@ -697,7 +705,7 @@ class CautionDocxExportService(
             listOf(3600, CONTENT_WIDTH - 3600),
             listOf(
                 listOf(FCell("CLIENT", bold = true), FCell(client.raisonSociale)),
-                listOf(FCell("COMPTE", bold = true), FCell(client.accountNumber.orRas())),
+                listOf(FCell("COMPTE", bold = true), FCell(content["numeroCompte"].orRas())),
                 listOf(FCell("AGENCE", bold = true), FCell(client.agence.orRas())),
                 listOf(FCell("GESTIONNAIRE", bold = true), FCell(client.gestionnaire.orRas())),
                 listOf(FCell("DATE ENTREE EN RELATION", bold = true), FCell(dateEntree.orRas())),

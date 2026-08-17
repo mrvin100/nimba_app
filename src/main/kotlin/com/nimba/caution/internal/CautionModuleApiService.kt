@@ -19,6 +19,7 @@ import com.nimba.client.ClientInfo
 import com.nimba.client.ClientModuleApi
 import com.nimba.client.getOrThrow
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.http.HttpStatus
@@ -44,49 +45,105 @@ class CautionModuleApiService(
     @Transactional
     override fun create(command: CreateCautionCommand): CautionInfo {
         val client = clients.getOrThrow(command.clientId)
-        val matricule = requireMatricule(client)
+        requireMatricule(client)
         requireRequiredFields(command.documentType, command.content, inDossier = command.dossierId != null)
         command.dossierId?.let {
             requireDossierForClient(it, client.id)
             assertWritable(requireDossier(it))
         }
 
+        val (referenceNumber, sequence) =
+            if (command.documentType == CautionDocumentType.PRO) {
+                resolveProReference(command)
+            } else {
+                val sequence =
+                    command.sequence
+                        ?: throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Le numéro de référence est requis")
+                numberGenerator.referenceNumber(sequence, command.documentType) to sequence
+            }
+
         val caution =
-            cautions.save(
-                CautionDocument(
-                    clientId = client.id,
-                    documentType = command.documentType,
-                    referenceNumber =
-                        numberGenerator.nextReferenceNumber(
-                            matricule,
-                            command.documentType,
-                            command.startingReferenceSequence,
-                        ),
-                    createdBy = command.createdBy,
-                ).apply {
-                    dossierId = command.dossierId
-                    contentJson = objectMapper.writeValueAsString(command.content)
-                },
-            )
+            saveHandlingDuplicateSequence {
+                cautions.saveAndFlush(
+                    CautionDocument(
+                        clientId = client.id,
+                        documentType = command.documentType,
+                        referenceNumber = referenceNumber,
+                        sequence = sequence,
+                        createdBy = command.createdBy,
+                    ).apply {
+                        dossierId = command.dossierId
+                        contentJson = objectMapper.writeValueAsString(command.content)
+                    },
+                )
+            }
         return caution.toInfo(objectMapper)
+    }
+
+    /**
+     * A PRO carries no series of its own: it is the same Caution de Soumission
+     * with revised dates, so it copies its origin SMS's reference number and
+     * sequence verbatim rather than being assigned a fresh one.
+     */
+    private fun resolveProReference(command: CreateCautionCommand): Pair<String, Int> {
+        val originId =
+            command.originDocumentId
+                ?: throw ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Un avenant de prorogation doit référencer la caution de soumission d'origine",
+                )
+        val origin =
+            cautions.findById(originId).orElseThrow {
+                ResponseStatusException(HttpStatus.NOT_FOUND, "Caution d'origine introuvable")
+            }
+        if (origin.documentType != CautionDocumentType.SMS) {
+            throw ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "L'avenant de prorogation ne peut référencer qu'une caution de soumission (SMS)",
+            )
+        }
+        if (origin.status != CautionStatus.FINAL) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "La caution de soumission d'origine doit être finalisée")
+        }
+        if (origin.dossierId != command.dossierId) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "La caution d'origine doit appartenir au même dossier")
+        }
+        return origin.referenceNumber to origin.sequence
     }
 
     @Transactional
     override fun createDossier(command: CreateDossierCommand): CautionDossierInfo {
         val client = clients.getOrThrow(command.clientId)
-        val matricule = requireMatricule(client)
+        requireMatricule(client)
         val dossier =
-            dossiers.save(
-                CautionDossier(
-                    clientId = client.id,
-                    referenceNumber = numberGenerator.nextDossierReferenceNumber(matricule, command.startingReferenceSequence),
-                    createdBy = command.createdBy,
-                ).apply {
-                    contentJson = objectMapper.writeValueAsString(command.content)
-                },
-            )
+            saveHandlingDuplicateSequence {
+                dossiers.saveAndFlush(
+                    CautionDossier(
+                        clientId = client.id,
+                        referenceNumber = numberGenerator.dossierReferenceNumber(command.sequence),
+                        sequence = command.sequence,
+                        createdBy = command.createdBy,
+                    ).apply {
+                        contentJson = objectMapper.writeValueAsString(command.content)
+                    },
+                )
+            }
         return dossier.toInfo(objectMapper)
     }
+
+    /** Surfaces a duplicate-sequence-within-series save as a clean 409 instead of a raw constraint-violation 500. */
+    private fun <T> saveHandlingDuplicateSequence(save: () -> T): T =
+        try {
+            save()
+        } catch (ex: DataIntegrityViolationException) {
+            throw ResponseStatusException(HttpStatus.CONFLICT, "Ce numéro de référence est déjà utilisé dans cette série", ex)
+        }
+
+    @Transactional(readOnly = true)
+    override fun suggestNextSequence(documentType: CautionDocumentType): Int = numberGenerator.suggestNextSequence(documentType)
+
+    @Transactional(readOnly = true)
+    override fun suggestNextDossierSequence(): Int = numberGenerator.suggestNextDossierSequence()
 
     @Transactional
     override fun updateDossier(
@@ -188,10 +245,12 @@ class CautionModuleApiService(
         return dossier.toInfo(objectMapper)
     }
 
-    /** A caution's official reference number embeds the client's matricule, so it must be present to issue one (it is optional on the client otherwise). */
-    private fun requireMatricule(client: ClientInfo): String =
-        client.matricule
-            ?: throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Le client doit disposer d'un matricule pour émettre une caution")
+    /** A caution can only be issued for a client properly identified by the bank, so the matricule must be present (it is optional on the client otherwise). */
+    private fun requireMatricule(client: ClientInfo) {
+        if (client.matricule == null) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Le client doit disposer d'un matricule pour émettre une caution")
+        }
+    }
 
     /** A dossier accepts writes (add/edit/delete of documents and common info) only while BROUILLON or EN_PROROGATION. */
     private fun assertWritable(dossier: CautionDossier) {
@@ -210,12 +269,24 @@ class CautionModuleApiService(
                 sigle = client.sigle,
                 adressePhysique = client.adressePhysique,
                 rccm = client.rccm,
-                accountNumber = client.accountNumber,
+                accountNumber = resolveAccountNumber(caution),
                 agence = client.agence,
             )
         caution.status = CautionStatus.FINAL
         caution.finalizedAt = Instant.now()
         caution.updatedAt = caution.finalizedAt!!
+    }
+
+    /**
+     * The account number a document's "numeroCompte" common field resolves to: the
+     * bank account this caution request is issued against, entered once on the
+     * dossier (a client can hold several credits or cautions on different
+     * accounts, so this never comes from the client record). A legacy standalone
+     * document (no dossier) carries every common field itself.
+     */
+    private fun resolveAccountNumber(caution: CautionDocument): String? {
+        val json = caution.dossierId?.let { dossiers.findById(it).orElse(null)?.contentJson } ?: caution.contentJson
+        return objectMapper.readValue<Map<String, String>>(json)["numeroCompte"]
     }
 
     private fun CautionDocumentVersion.toInfo(objectMapper: ObjectMapper): CautionDocumentVersionInfo =
@@ -288,8 +359,12 @@ class CautionModuleApiService(
             ),
         )
         caution.contentJson = after
+        if (command.sequence != null && command.sequence != caution.sequence && caution.documentType != CautionDocumentType.PRO) {
+            caution.sequence = command.sequence
+            caution.referenceNumber = numberGenerator.withSequence(caution.referenceNumber, command.sequence)
+        }
         caution.updatedAt = Instant.now()
-        return caution.toInfo(objectMapper)
+        return saveHandlingDuplicateSequence { cautions.saveAndFlush(caution) }.toInfo(objectMapper)
     }
 
     @Transactional(readOnly = true)
@@ -313,9 +388,6 @@ class CautionModuleApiService(
         documentType: CautionDocumentType?,
         status: CautionStatus?,
     ): Page<CautionInfo> = cautions.search(clientId, documentType, status, pageable).map { it.toInfo(objectMapper) }
-
-    @Transactional(readOnly = true)
-    override fun referenceSequenceInitialized(): Boolean = numberGenerator.isInitialized()
 
     @Transactional
     override fun delete(id: UUID) {
@@ -383,6 +455,7 @@ class CautionModuleApiService(
             dossierId = dossierId,
             documentType = documentType,
             referenceNumber = referenceNumber,
+            sequence = sequence,
             status = status,
             content = objectMapper.readValue<Map<String, String>>(contentJson),
             clientSnapshot = clientSnapshot?.toInfo(),
@@ -408,6 +481,7 @@ class CautionModuleApiService(
             id = requireNotNull(id),
             clientId = clientId,
             referenceNumber = referenceNumber,
+            sequence = sequence,
             status = status,
             version = version,
             content = objectMapper.readValue<Map<String, String>>(contentJson),

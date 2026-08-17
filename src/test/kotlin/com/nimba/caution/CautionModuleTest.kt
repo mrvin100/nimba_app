@@ -19,7 +19,6 @@ import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 @Import(TestcontainersConfiguration::class)
 @SpringBootTest
@@ -40,16 +39,19 @@ class CautionModuleTest(
                     raisonSociale = "GUINEENNE DES TRAVAUX ET FOURNITURES - SARLU",
                     createdBy = dcm,
                     rccm = "GN.2025.B.07118",
-                    accountNumber = "021 001 0103804401 34",
                     agence = "Kaloum",
                 ),
             ).id
+
+    /** Every call gets a fresh, always-free sequence in [type]'s own series, same as the create form's suggestion. */
+    private fun nextSequence(type: CautionDocumentType): Int = cautions.suggestNextSequence(type)
 
     private val smsContent =
         mapOf(
             "beneficiaire" to "ELECTRICITE DE GUINEE EDG-SA",
             "referenceAppelOffres" to "AAONO N°: 001/EDG-SA/DAAL/PRMP/2026",
             "objetMarche" to "Travaux de réfection des bâtiments du site de Garafiri",
+            "numeroCompte" to "021 001 0103804401 34",
             "devise" to "GNF",
             "montant" to "238756476",
             "dateEmission" to "2026-02-11",
@@ -62,14 +64,16 @@ class CautionModuleTest(
         )
 
     @Test
-    fun `creates a draft SMS caution with an assigned reference number`() {
+    fun `creates a draft SMS caution with its analyst-entered reference number`() {
         val dcm = dcmMemberId()
         val client = clientId(dcm)
+        val sequence = nextSequence(CautionDocumentType.SMS)
 
-        val created = cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm))
+        val created = cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm, sequence))
 
         assertEquals(CautionStatus.DRAFT, created.status)
         assertContains(created.referenceNumber, "-SMS-")
+        assertEquals(sequence, created.sequence)
         assertNull(created.clientSnapshot)
         assertEquals("238756476", created.content["montant"])
     }
@@ -80,12 +84,42 @@ class CautionModuleTest(
         val client = clientId(dcm)
 
         assertFailsWith<ResponseStatusException> {
-            cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, mapOf("beneficiaire" to "EDG-SA"), dcm))
+            cautions.create(
+                CreateCautionCommand(
+                    client,
+                    CautionDocumentType.SMS,
+                    mapOf("beneficiaire" to "EDG-SA"),
+                    dcm,
+                    nextSequence(CautionDocumentType.SMS),
+                ),
+            )
         }
     }
 
     @Test
-    fun `two documents for the same client draw independent reference numbers from the same global sequence`() {
+    fun `rejects a caution with no sequence`() {
+        val dcm = dcmMemberId()
+        val client = clientId(dcm)
+
+        assertFailsWith<ResponseStatusException> {
+            cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm, sequence = null))
+        }
+    }
+
+    @Test
+    fun `two SMS cautions cannot reuse the same sequence`() {
+        val dcm = dcmMemberId()
+        val client = clientId(dcm)
+        val sequence = nextSequence(CautionDocumentType.SMS)
+        cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm, sequence))
+
+        assertFailsWith<ResponseStatusException> {
+            cautions.create(CreateCautionCommand(clientId(dcm), CautionDocumentType.SMS, smsContent, dcm, sequence))
+        }
+    }
+
+    @Test
+    fun `SMS and ACF run independent series`() {
         val dcm = dcmMemberId()
         val client = clientId(dcm)
         val acfContent =
@@ -93,6 +127,7 @@ class CautionModuleTest(
                 "beneficiaire" to "ELECTRICITE DE GUINEE EDG SA",
                 "referenceAppelOffres" to "007/EDG-SA/DAAL/DPSM/2025",
                 "objetMarche" to "Travaux de réfection des bâtiments de GARAFIRI",
+                "numeroCompte" to "021 001 0103804401 34",
                 "devise" to "GNF",
                 "montant" to "2828096140",
                 "dateEmission" to "2026-02-19",
@@ -101,21 +136,24 @@ class CautionModuleTest(
                 "signataire2Nom" to "FANNY SOUMAH",
                 "signataire2Titre" to "Directrice Générale Adjointe",
             )
+        val smsSequence = nextSequence(CautionDocumentType.SMS)
+        val acfSequence = nextSequence(CautionDocumentType.ACF)
 
-        val sms = cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm))
-        val acf = cautions.create(CreateCautionCommand(client, CautionDocumentType.ACF, acfContent, dcm))
+        val sms = cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm, smsSequence))
+        val acf = cautions.create(CreateCautionCommand(client, CautionDocumentType.ACF, acfContent, dcm, acfSequence))
 
-        assertTrue(sms.referenceNumber != acf.referenceNumber)
-        val smsSequence = sms.referenceNumber.substringBefore("-").toInt()
-        val acfSequence = acf.referenceNumber.substringBefore("-").toInt()
-        assertEquals(smsSequence + 1, acfSequence)
+        assertEquals(smsSequence, sms.sequence)
+        assertEquals(acfSequence, acf.sequence)
+        assertEquals(smsSequence, nextSequence(CautionDocumentType.SMS) - 1)
+        assertEquals(acfSequence, nextSequence(CautionDocumentType.ACF) - 1)
     }
 
     @Test
     fun `finalizing freezes the client snapshot, immune to later client edits`() {
         val dcm = dcmMemberId()
         val client = clientId(dcm)
-        val created = cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm))
+        val created =
+            cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm, nextSequence(CautionDocumentType.SMS)))
 
         val finalized = cautions.finalize(created.id)
         assertEquals(CautionStatus.FINAL, finalized.status)
@@ -131,7 +169,8 @@ class CautionModuleTest(
     fun `a finalized caution rejects further edits, deletion or re-finalization`() {
         val dcm = dcmMemberId()
         val client = clientId(dcm)
-        val created = cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm))
+        val created =
+            cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm, nextSequence(CautionDocumentType.SMS)))
         cautions.finalize(created.id)
 
         assertFailsWith<ResponseStatusException> { cautions.update(created.id, UpdateCautionCommand(smsContent), dcm) }
@@ -143,7 +182,8 @@ class CautionModuleTest(
     fun `deletes a draft`() {
         val dcm = dcmMemberId()
         val client = clientId(dcm)
-        val created = cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm))
+        val created =
+            cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm, nextSequence(CautionDocumentType.SMS)))
 
         cautions.delete(created.id)
 
@@ -155,8 +195,10 @@ class CautionModuleTest(
         val dcm = dcmMemberId()
         val client = clientId(dcm)
         val otherClient = clientId(dcm)
-        cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm))
-        cautions.create(CreateCautionCommand(otherClient, CautionDocumentType.SMS, smsContent, dcm))
+        cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm, nextSequence(CautionDocumentType.SMS)))
+        cautions.create(
+            CreateCautionCommand(otherClient, CautionDocumentType.SMS, smsContent, dcm, nextSequence(CautionDocumentType.SMS)),
+        )
 
         val forClient = cautions.list(PageRequest.of(0, 20), clientId = client)
         assertEquals(1, forClient.totalElements)

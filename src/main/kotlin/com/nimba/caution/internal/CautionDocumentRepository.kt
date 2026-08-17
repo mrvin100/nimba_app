@@ -29,9 +29,9 @@ interface CautionDocumentRepository : JpaRepository<CautionDocument, UUID> {
 
     fun deleteByDossierId(dossierId: UUID)
 
-    /** A client's documents in a given status — the matricule-realignment listener only touches DRAFT ones. */
-    fun findByClientIdAndStatus(
-        clientId: UUID,
-        status: CautionStatus,
-    ): List<CautionDocument>
+    /** The highest sequence already used within a document type's own series, or null if it has none yet. */
+    @Query("select max(c.sequence) from CautionDocument c where c.documentType = :documentType")
+    fun maxSequence(
+        @Param("documentType") documentType: CautionDocumentType,
+    ): Int?
 }
