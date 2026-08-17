@@ -50,6 +50,17 @@ class CautionDossierTest(
         createdBy: UUID,
     ): CreateDossierCommand = CreateDossierCommand(clientId, content, createdBy, nextDossierSequence())
 
+    /** Attaches a document of [type] to [dossierId] with a fresh sequence in its own series and the shared smsContent fixture. */
+    private fun attachDocument(
+        client: UUID,
+        type: CautionDocumentType,
+        dcm: UUID,
+        dossierId: UUID,
+    ): CautionInfo =
+        cautions.create(
+            CreateCautionCommand(client, type, smsContent, dcm, nextSequence(type), dossierId = dossierId),
+        )
+
     private fun docText(bytes: ByteArray): String =
         XWPFDocument(ByteArrayInputStream(bytes)).use { doc ->
             buildString {
@@ -91,14 +102,8 @@ class CautionDossierTest(
         assertTrue(dossier.referenceNumber.startsWith("DOS-"))
         assertEquals(DossierStatus.BROUILLON, dossier.status)
 
-        val sms =
-            cautions.create(
-                CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm, nextSequence(CautionDocumentType.SMS), dossierId = dossier.id),
-            )
-        val afc =
-            cautions.create(
-                CreateCautionCommand(client, CautionDocumentType.AFC, smsContent, dcm, nextSequence(CautionDocumentType.AFC), dossierId = dossier.id),
-            )
+        val sms = attachDocument(client, CautionDocumentType.SMS, dcm, dossier.id)
+        val afc = attachDocument(client, CautionDocumentType.AFC, dcm, dossier.id)
         // A standalone document (no dossier) must not show up under the dossier.
         cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm, nextSequence(CautionDocumentType.SMS)))
 
@@ -114,9 +119,7 @@ class CautionDossierTest(
         val dossier = cautions.createDossier(dossierCommand(clientA, emptyMap(), dcm))
 
         assertFailsWith<ResponseStatusException> {
-            cautions.create(
-                CreateCautionCommand(clientB, CautionDocumentType.SMS, smsContent, dcm, nextSequence(CautionDocumentType.SMS), dossierId = dossier.id),
-            )
+            attachDocument(clientB, CautionDocumentType.SMS, dcm, dossier.id)
         }
     }
 
@@ -135,12 +138,8 @@ class CautionDossierTest(
         val dcm = dcmMemberId()
         val client = clientId(dcm)
         val dossier = cautions.createDossier(dossierCommand(client, emptyMap(), dcm))
-        cautions.create(
-            CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm, nextSequence(CautionDocumentType.SMS), dossierId = dossier.id),
-        )
-        cautions.create(
-            CreateCautionCommand(client, CautionDocumentType.AFC, smsContent, dcm, nextSequence(CautionDocumentType.AFC), dossierId = dossier.id),
-        )
+        attachDocument(client, CautionDocumentType.SMS, dcm, dossier.id)
+        attachDocument(client, CautionDocumentType.AFC, dcm, dossier.id)
         assertEquals(2, cautions.dossierDocuments(dossier.id).size)
 
         cautions.deleteDossier(dossier.id)
@@ -166,9 +165,7 @@ class CautionDossierTest(
         val client = clientId(dcm)
         val dossier = cautions.createDossier(dossierCommand(client, emptyMap(), dcm))
         assertEquals(DossierStatus.BROUILLON, dossier.status)
-        cautions.create(
-            CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm, nextSequence(CautionDocumentType.SMS), dossierId = dossier.id),
-        )
+        attachDocument(client, CautionDocumentType.SMS, dcm, dossier.id)
 
         // BROUILLON: amend allowed, business version bumps.
         val amended = cautions.updateDossier(dossier.id, mapOf("beneficiaire" to "EDG"))
