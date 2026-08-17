@@ -8,12 +8,12 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 /**
- * Formats a caution's reference number, `{sequence}-{documentType}-{date}`
- * (e.g. `04370-SMS-11-02-26`), and a dossier's, `DOS-{date}-{sequence}`
- * (e.g. `DOS-11-02-26-04370`). Neither embeds the client's matricule: the
- * reference identifies the document/dossier itself within its own series, not
- * the client (see [CautionClientSnapshot] for the client identity actually
- * captured on a document).
+ * Formats a caution document's reference number,
+ * `{sequence}-{matricule}-{documentType}-{date}` (e.g. `04370-038044-SMS-11-02-26`),
+ * and a dossier's, `DOS-{date}-{sequence}` (e.g. `DOS-11-02-26-04370`). A
+ * document embeds the issuing client's matricule (it identifies the paper
+ * trail alongside the client); a dossier does not, since it is purely an
+ * internal grouping, not a document handed to anyone outside the bank.
  *
  * Unlike a plain auto-increment, [sequence] is never assigned here: SMS, ACF,
  * AFC and the dossier each run their own independent series, and the DCM
@@ -35,10 +35,11 @@ class CautionNumberGenerator(
 
     fun referenceNumber(
         sequence: Int,
+        matricule: String,
         documentType: CautionDocumentType,
     ): String {
         val date = LocalDate.now(clock).format(dateFormat)
-        return "%05d-%s-%s".format(sequence, documentType.code, date)
+        return "%05d-%s-%s-%s".format(sequence, matricule, documentType.code, date)
     }
 
     fun dossierReferenceNumber(sequence: Int): String {
@@ -46,7 +47,7 @@ class CautionNumberGenerator(
         return "%s-%s-%05d".format(DOSSIER_CODE, date, sequence)
     }
 
-    /** A document reference with only its leading sequence segment swapped, so an edit never disturbs the type/date it was issued with. */
+    /** A document reference with only its leading sequence segment swapped, so an edit never disturbs the matricule/type/date it was issued with. */
     fun withSequence(
         referenceNumber: String,
         sequence: Int,
