@@ -19,16 +19,17 @@ import java.util.UUID
  * One document generated within a dossier (Caution de Soumission, Attestation
  * de Capacité Financière, Attestation de Facilité de Crédit, Avenant de
  * Prorogation…). [clientId] references the client module's aggregate by id only
- * — no JPA relationship crosses the module boundary. [referenceNumber]
- * (format `{sequence}-{documentType.code}-{date}`; does not embed the client's
- * matricule — see [CautionClientSnapshot] for the client identity actually
- * captured) and [sequence] are assigned once at creation and stay editable
- * (together) while the document is still editable, EXCEPT a PRO: it carries no
- * series of its own (it is the same Caution de Soumission with revised dates),
- * so it copies its origin SMS's [referenceNumber] and [sequence] verbatim (see
+ * — no JPA relationship crosses the module boundary. [referenceNumber] (format
+ * `{sequence}-{matricule}-{documentType.code}-{date}`) and [sequence] are
+ * assigned once at creation and stay editable (together) while the document is
+ * still editable, EXCEPT a PRO: it carries no series of its own (it is the
+ * same Caution de Soumission with revised dates), so it copies its origin
+ * SMS's [referenceNumber] and [sequence] verbatim (see
  * [com.nimba.caution.internal.CautionModuleApiService.create]). Frozen for
- * good once finalized, same as the rest of the document. The table keeps its
- * historical name (`caution`).
+ * good once finalized, same as the rest of the document. [referenceNumber]
+ * realigns the moment a client's matricule is corrected (see
+ * [com.nimba.client.ClientMatriculeCorrected]) while the document is still
+ * DRAFT. The table keeps its historical name (`caution`).
  */
 @Entity
 @Table(name = "caution")
