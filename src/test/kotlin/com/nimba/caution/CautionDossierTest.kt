@@ -39,6 +39,28 @@ class CautionDossierTest(
     private fun clientId(dcm: UUID): UUID =
         clients.create(CreateClientCommand("M-${UUID.randomUUID()}", "SOCIETE TEST", dcm, agence = "Kaloum")).id
 
+    /** Every call gets a fresh, always-free sequence in its series, same as the create form's suggestion. */
+    private fun nextSequence(type: CautionDocumentType): Int = cautions.suggestNextSequence(type)
+
+    private fun nextDossierSequence(): Int = cautions.suggestNextDossierSequence()
+
+    private fun dossierCommand(
+        clientId: UUID,
+        content: Map<String, String>,
+        createdBy: UUID,
+    ): CreateDossierCommand = CreateDossierCommand(clientId, content, createdBy, nextDossierSequence())
+
+    /** Attaches a document of [type] to [dossierId] with a fresh sequence in its own series and the shared smsContent fixture. */
+    private fun attachDocument(
+        client: UUID,
+        type: CautionDocumentType,
+        dcm: UUID,
+        dossierId: UUID,
+    ): CautionInfo =
+        cautions.create(
+            CreateCautionCommand(client, type, smsContent, dcm, nextSequence(type), dossierId = dossierId),
+        )
+
     private fun docText(bytes: ByteArray): String =
         XWPFDocument(ByteArrayInputStream(bytes)).use { doc ->
             buildString {
@@ -52,6 +74,7 @@ class CautionDossierTest(
             "beneficiaire" to "MINISTERE DE L'ELEVAGE",
             "referenceAppelOffres" to "N°01/MAGEL/DNAPA/PRMP/2026",
             "objetMarche" to "Travaux Lot 8",
+            "numeroCompte" to "0101788201 05",
             "devise" to "GNF",
             "montant" to "306000000",
             "dateEmission" to "2026-07-21",
@@ -70,19 +93,19 @@ class CautionDossierTest(
 
         val dossier =
             cautions.createDossier(
-                CreateDossierCommand(
-                    clientId = client,
-                    content = mapOf("beneficiaire" to "MINISTERE DE L'ELEVAGE", "referenceAppelOffres" to "N°01/MAGEL/2026"),
-                    createdBy = dcm,
+                dossierCommand(
+                    client,
+                    mapOf("beneficiaire" to "MINISTERE DE L'ELEVAGE", "referenceAppelOffres" to "N°01/MAGEL/2026"),
+                    dcm,
                 ),
             )
-        assertContains(dossier.referenceNumber, "-DOS-")
+        assertTrue(dossier.referenceNumber.startsWith("DOS-"))
         assertEquals(DossierStatus.BROUILLON, dossier.status)
 
-        val sms = cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm, dossierId = dossier.id))
-        val afc = cautions.create(CreateCautionCommand(client, CautionDocumentType.AFC, smsContent, dcm, dossierId = dossier.id))
+        val sms = attachDocument(client, CautionDocumentType.SMS, dcm, dossier.id)
+        val afc = attachDocument(client, CautionDocumentType.AFC, dcm, dossier.id)
         // A standalone document (no dossier) must not show up under the dossier.
-        cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm))
+        cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm, nextSequence(CautionDocumentType.SMS)))
 
         val documents = cautions.dossierDocuments(dossier.id)
         assertEquals(setOf(sms.id, afc.id), documents.map { it.id }.toSet())
@@ -93,10 +116,10 @@ class CautionDossierTest(
         val dcm = dcmMemberId()
         val clientA = clientId(dcm)
         val clientB = clientId(dcm)
-        val dossier = cautions.createDossier(CreateDossierCommand(clientA, emptyMap(), dcm))
+        val dossier = cautions.createDossier(dossierCommand(clientA, emptyMap(), dcm))
 
         assertFailsWith<ResponseStatusException> {
-            cautions.create(CreateCautionCommand(clientB, CautionDocumentType.SMS, smsContent, dcm, dossierId = dossier.id))
+            attachDocument(clientB, CautionDocumentType.SMS, dcm, dossier.id)
         }
     }
 
@@ -104,7 +127,7 @@ class CautionDossierTest(
     fun `lists dossiers filtered by client`() {
         val dcm = dcmMemberId()
         val client = clientId(dcm)
-        cautions.createDossier(CreateDossierCommand(client, emptyMap(), dcm))
+        cautions.createDossier(dossierCommand(client, emptyMap(), dcm))
 
         val forClient = cautions.listDossiers(PageRequest.of(0, 20), clientId = client)
         assertEquals(1, forClient.totalElements)
@@ -114,9 +137,9 @@ class CautionDossierTest(
     fun `deleting a dossier removes it and cascades to its documents`() {
         val dcm = dcmMemberId()
         val client = clientId(dcm)
-        val dossier = cautions.createDossier(CreateDossierCommand(client, emptyMap(), dcm))
-        cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm, dossierId = dossier.id))
-        cautions.create(CreateCautionCommand(client, CautionDocumentType.AFC, smsContent, dcm, dossierId = dossier.id))
+        val dossier = cautions.createDossier(dossierCommand(client, emptyMap(), dcm))
+        attachDocument(client, CautionDocumentType.SMS, dcm, dossier.id)
+        attachDocument(client, CautionDocumentType.AFC, dcm, dossier.id)
         assertEquals(2, cautions.dossierDocuments(dossier.id).size)
 
         cautions.deleteDossier(dossier.id)
@@ -130,7 +153,7 @@ class CautionDossierTest(
     fun `a finalized dossier cannot be deleted`() {
         val dcm = dcmMemberId()
         val client = clientId(dcm)
-        val dossier = cautions.createDossier(CreateDossierCommand(client, emptyMap(), dcm))
+        val dossier = cautions.createDossier(dossierCommand(client, emptyMap(), dcm))
         cautions.finalizeDossier(dossier.id, dcm)
 
         assertFailsWith<ResponseStatusException> { cautions.deleteDossier(dossier.id) }
@@ -140,9 +163,9 @@ class CautionDossierTest(
     fun `finalize locks the dossier, proroge reopens it, refinalize re-locks and journals every step`() {
         val dcm = dcmMemberId()
         val client = clientId(dcm)
-        val dossier = cautions.createDossier(CreateDossierCommand(client, emptyMap(), dcm))
+        val dossier = cautions.createDossier(dossierCommand(client, emptyMap(), dcm))
         assertEquals(DossierStatus.BROUILLON, dossier.status)
-        cautions.create(CreateCautionCommand(client, CautionDocumentType.SMS, smsContent, dcm, dossierId = dossier.id))
+        attachDocument(client, CautionDocumentType.SMS, dcm, dossier.id)
 
         // BROUILLON: amend allowed, business version bumps.
         val amended = cautions.updateDossier(dossier.id, mapOf("beneficiaire" to "EDG"))
@@ -176,7 +199,7 @@ class CautionDossierTest(
     fun `proroge requires a finalized dossier`() {
         val dcm = dcmMemberId()
         val client = clientId(dcm)
-        val dossier = cautions.createDossier(CreateDossierCommand(client, emptyMap(), dcm))
+        val dossier = cautions.createDossier(dossierCommand(client, emptyMap(), dcm))
         assertFailsWith<ResponseStatusException> { cautions.prorogeDossier(dossier.id, dcm, "motif") }
     }
 
@@ -185,7 +208,7 @@ class CautionDossierTest(
         val dcm = dcmMemberId()
         val client = clientId(dcm)
         // The dossier carries the common context (bénéficiaire, montant, signataires…).
-        val dossier = cautions.createDossier(CreateDossierCommand(client, smsContent, dcm))
+        val dossier = cautions.createDossier(dossierCommand(client, smsContent, dcm))
         // The document provides only its SPECIFIC fields (amount, currency, dates); the common ones are inherited.
         val document =
             cautions.create(
@@ -194,6 +217,7 @@ class CautionDossierTest(
                     CautionDocumentType.SMS,
                     mapOf("devise" to "GNF", "montant" to "306000000", "dateOffre" to "2026-02-13", "dateExpiration" to "2026-05-13"),
                     dcm,
+                    nextSequence(CautionDocumentType.SMS),
                     dossierId = dossier.id,
                 ),
             )
@@ -210,7 +234,7 @@ class CautionDossierTest(
     fun `editing a document records a version with before, after, reason and actor`() {
         val dcm = dcmMemberId()
         val client = clientId(dcm)
-        val dossier = cautions.createDossier(CreateDossierCommand(client, smsContent, dcm))
+        val dossier = cautions.createDossier(dossierCommand(client, smsContent, dcm))
         val document =
             cautions.create(
                 CreateCautionCommand(
@@ -218,6 +242,7 @@ class CautionDossierTest(
                     CautionDocumentType.SMS,
                     mapOf("devise" to "GNF", "montant" to "306000000", "dateOffre" to "2026-02-13", "dateExpiration" to "2026-05-13"),
                     dcm,
+                    nextSequence(CautionDocumentType.SMS),
                     dossierId = dossier.id,
                 ),
             )
@@ -249,6 +274,7 @@ class CautionDossierTest(
             cautions.createDossier(
                 CreateDossierCommand(
                     clientId = client,
+                    sequence = nextDossierSequence(),
                     content =
                         mapOf(
                             "notifReference" to "N°/     /AFB/DCM/DGA/26",
@@ -304,7 +330,6 @@ class CautionDossierTest(
                         matricule = "M-${UUID.randomUUID()}",
                         raisonSociale = "SOCIETE GUINEE BATI BUSINESS SARL",
                         createdBy = dcm,
-                        accountNumber = "0101788201 05",
                         agence = "KALOUM",
                         gestionnaire = "DGA3",
                         dateEntreeRelation = LocalDate.of(2020, 2, 20),
@@ -314,11 +339,13 @@ class CautionDossierTest(
             cautions.createDossier(
                 CreateDossierCommand(
                     clientId = client,
+                    sequence = nextDossierSequence(),
                     content =
                         mapOf(
                             "beneficiaire" to "MINISTERE DE L'ELEVAGE",
                             "referenceAppelOffres" to "N°01/MAGEL/DNAPA/PRMP/2026",
                             "objetMarche" to "Travaux Lot 4, Lot6 et Lot8",
+                            "numeroCompte" to "0101788201 05",
                             "mouvementConfie" to "1 136 805 909",
                             "solde" to "8 721 004",
                             "soldeDate" to "22/07/2025",

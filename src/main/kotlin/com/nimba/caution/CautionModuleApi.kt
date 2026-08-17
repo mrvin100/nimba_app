@@ -46,8 +46,11 @@ interface CautionModuleApi {
     /** Deletes a draft caution (never a finalized one — it is an official record). 409 if FINAL. */
     fun delete(id: UUID)
 
-    /** Whether any caution has ever been created — drives whether the create form still offers a starting-sequence override. */
-    fun referenceSequenceInitialized(): Boolean
+    /** The next free number in [documentType]'s own reference series — pre-fills the create form's editable sequence field. */
+    fun suggestNextSequence(documentType: CautionDocumentType): Int
+
+    /** The next free number in the dossier reference series. */
+    fun suggestNextDossierSequence(): Int
 
     /** Opens a caution dossier (one client request against one appel d'offres) and assigns its reference number. 404 if the client is unknown. */
     fun createDossier(command: CreateDossierCommand): CautionDossierInfo

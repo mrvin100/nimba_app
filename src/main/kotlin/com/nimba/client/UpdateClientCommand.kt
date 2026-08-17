@@ -16,7 +16,6 @@ data class UpdateClientCommand(
     val activiteDeBase: String? = null,
     val codeNif: String? = null,
     val rccm: String? = null,
-    val accountNumber: String? = null,
     val principalDirigeant: String? = null,
     val dateEntreeRelation: LocalDate? = null,
     val dateDerniereVisite: LocalDate? = null,

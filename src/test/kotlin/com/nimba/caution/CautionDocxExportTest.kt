@@ -72,6 +72,7 @@ class CautionDocxExportTest(
                                 "beneficiaire" to "ELECTRICITE DE GUINEE EDG-SA",
                                 "referenceAppelOffres" to "AAONO N°: 001/EDG-SA/DAAL/PRMP/2026",
                                 "objetMarche" to "Travaux de Réfection des Bâtiments du site de Garafiri (EDG-SA)",
+                                "numeroCompte" to "021 001 0103804401 34",
                                 "devise" to "GNF",
                                 // Typed with thousands spaces: the export must still resolve the amount, not fall back to "RAS".
                                 "montant" to "238 756 476",
@@ -80,6 +81,7 @@ class CautionDocxExportTest(
                                 "dateExpiration" to "2026-05-13",
                             ),
                     createdBy = dcm,
+                    sequence = cautions.suggestNextSequence(CautionDocumentType.SMS),
                 ),
             )
         cautions.finalize(created.id)
@@ -122,7 +124,6 @@ class CautionDocxExportTest(
                     createdBy = dcm,
                     sigle = "G-TRAF +",
                     rccm = "GN.2025.B.07118",
-                    accountNumber = "021 001 0103804401 34",
                     agence = "Kaloum",
                 ),
             )
@@ -137,11 +138,13 @@ class CautionDocxExportTest(
                                 "beneficiaire" to "L'ELECTRICITE DE GUINEE EDG SA",
                                 "referenceAppelOffres" to "007/EDG-SA/DAAL/DPSM/2025",
                                 "objetMarche" to "Travaux de réfection des bâtiments de GARAFIRI (EDG-SA).LOT1",
+                                "numeroCompte" to "021 001 0103804401 34",
                                 "devise" to "GNF",
                                 "montant" to "2828096140",
                                 "dateEmission" to "2026-02-19",
                             ),
                     createdBy = dcm,
+                    sequence = cautions.suggestNextSequence(CautionDocumentType.ACF),
                 ),
             )
         cautions.finalize(created.id)
@@ -175,6 +178,33 @@ class CautionDocxExportTest(
         val dcm = dcmMemberId()
         val client =
             clients.create(CreateClientCommand("M-${UUID.randomUUID()}", "SOCIETE X", dcm, agence = "Kaloum")).id
+        val originContent =
+            signatoryFields() +
+                mapOf(
+                    "beneficiaire" to "EDG SA",
+                    "referenceAppelOffres" to "007/EDG-SA/2025",
+                    "objetMarche" to "Travaux",
+                    "numeroCompte" to "021 001 0103804401 34",
+                    "devise" to "GNF",
+                    "montant" to "238756476",
+                    "dateEmission" to "2026-02-11",
+                    "dateOffre" to "2026-02-13",
+                    "dateExpiration" to "2026-05-13",
+                )
+        // A PRO is the same SMS with revised dates: it references a real, already
+        // finalized SMS (never a free-typed reference) and copies its number verbatim.
+        val origin =
+            cautions.create(
+                CreateCautionCommand(
+                    clientId = client,
+                    documentType = CautionDocumentType.SMS,
+                    content = originContent,
+                    createdBy = dcm,
+                    sequence = cautions.suggestNextSequence(CautionDocumentType.SMS),
+                ),
+            )
+        cautions.finalize(origin.id)
+
         val created =
             cautions.create(
                 CreateCautionCommand(
@@ -186,23 +216,25 @@ class CautionDocxExportTest(
                                 "beneficiaire" to "EDG SA",
                                 "referenceAppelOffres" to "007/EDG-SA/2025",
                                 "objetMarche" to "Travaux",
+                                "numeroCompte" to "021 001 0103804401 34",
                                 "devise" to "GNF",
                                 "montant" to "238756476",
                                 "dateEmission" to "2026-07-21",
-                                "cautionOrigineReference" to "04370-038044-SMS-11-02-26",
                                 "cautionOrigineDate" to "2026-02-11",
                                 "nouvelleDateExpiration" to "2026-12-31",
                             ),
                     createdBy = dcm,
+                    originDocumentId = origin.id,
                 ),
             )
+        assertEquals(origin.referenceNumber, created.referenceNumber)
         cautions.finalize(created.id)
 
         val result = export.export(created.id)
         val text = allText(result.content)
 
         assertContains(text, "AVENANT DE PROROGATION")
-        assertContains(text, "04370-038044-SMS-11-02-26")
+        assertContains(text, origin.referenceNumber)
         assertContains(text, "Prorogeons par la présente")
         assertContains(text, "31 Décembre 2026")
     }
@@ -230,11 +262,13 @@ class CautionDocxExportTest(
                                 "beneficiaire" to "EDG SA",
                                 "referenceAppelOffres" to "007/EDG-SA/2025",
                                 "objetMarche" to "Objet du marché",
+                                "numeroCompte" to "021 001 0103804401 34",
                                 "devise" to "GNF",
                                 "montant" to "1000",
                                 "dateEmission" to "2026-01-01",
                             ),
                     createdBy = dcm,
+                    sequence = cautions.suggestNextSequence(CautionDocumentType.ACF),
                 ),
             )
 
@@ -273,11 +307,13 @@ class CautionDocxExportTest(
                                 "beneficiaire" to "MINISTERE DE L'ELEVAGE",
                                 "referenceAppelOffres" to "N°01/MAGEL/DNAPA/PRMP/2026",
                                 "objetMarche" to "Travaux de construction d'un marché à bétail à N'zérékoré Lot8",
+                                "numeroCompte" to "021 001 0103804401 34",
                                 "devise" to "GNF",
                                 "montant" to "4000000000",
                                 "dateEmission" to "2026-07-21",
                             ),
                     createdBy = dcm,
+                    sequence = cautions.suggestNextSequence(CautionDocumentType.AFC),
                 ),
             )
         cautions.finalize(created.id)

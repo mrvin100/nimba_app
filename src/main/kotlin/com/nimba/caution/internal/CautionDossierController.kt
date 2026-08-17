@@ -44,6 +44,10 @@ class CautionDossierController(
         @Valid @RequestBody request: CreateDossierRequest,
     ): DossierResponse = cautions.createDossier(request.toCommand(currentUser.id())).toResponse()
 
+    /** The next free number in the dossier series — pre-fills the create form's editable sequence field. */
+    @GetMapping("/next-sequence")
+    fun nextSequence(): SuggestedSequenceResponse = SuggestedSequenceResponse(cautions.suggestNextDossierSequence())
+
     @GetMapping
     fun list(
         @PageableDefault(size = 20, sort = ["createdAt"], direction = Sort.Direction.DESC) pageable: Pageable,
