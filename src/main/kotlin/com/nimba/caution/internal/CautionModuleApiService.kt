@@ -45,7 +45,7 @@ class CautionModuleApiService(
     @Transactional
     override fun create(command: CreateCautionCommand): CautionInfo {
         val client = clients.getOrThrow(command.clientId)
-        requireMatricule(client)
+        val matricule = requireMatricule(client)
         requireRequiredFields(command.documentType, command.content, inDossier = command.dossierId != null)
         command.dossierId?.let {
             requireDossierForClient(it, client.id)
@@ -59,7 +59,7 @@ class CautionModuleApiService(
                 val sequence =
                     command.sequence
                         ?: throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Le numéro de référence est requis")
-                numberGenerator.referenceNumber(sequence, command.documentType) to sequence
+                numberGenerator.referenceNumber(sequence, matricule, command.documentType) to sequence
             }
 
         val caution =
@@ -245,12 +245,10 @@ class CautionModuleApiService(
         return dossier.toInfo(objectMapper)
     }
 
-    /** A caution can only be issued for a client properly identified by the bank, so the matricule must be present (it is optional on the client otherwise). */
-    private fun requireMatricule(client: ClientInfo) {
-        if (client.matricule == null) {
-            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Le client doit disposer d'un matricule pour émettre une caution")
-        }
-    }
+    /** A document's reference number embeds the client's matricule, so it must be present to issue one (it is optional on the client otherwise). */
+    private fun requireMatricule(client: ClientInfo): String =
+        client.matricule
+            ?: throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Le client doit disposer d'un matricule pour émettre une caution")
 
     /** A dossier accepts writes (add/edit/delete of documents and common info) only while BROUILLON or EN_PROROGATION. */
     private fun assertWritable(dossier: CautionDossier) {
