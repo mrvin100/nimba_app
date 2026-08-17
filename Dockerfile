@@ -19,6 +19,11 @@ RUN ./gradlew bootJar -x test --no-daemon
 FROM eclipse-temurin:25-jre-noble
 WORKDIR /app
 
+# curl backs the container HEALTHCHECK (infra/docker-compose.yml polls
+# /actuator/health) — the base image doesn't ship it.
+RUN apt-get update && apt-get install --no-install-recommends -y curl \
+  && rm -rf /var/lib/apt/lists/*
+
 # Run as a non-root user
 RUN groupadd --system tum && useradd --system --gid tum --no-create-home tum
 
