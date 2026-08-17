@@ -217,6 +217,7 @@ class CautionDossierTest(
                     CautionDocumentType.SMS,
                     mapOf("devise" to "GNF", "montant" to "306000000", "dateOffre" to "2026-02-13", "dateExpiration" to "2026-05-13"),
                     dcm,
+                    nextSequence(CautionDocumentType.SMS),
                     dossierId = dossier.id,
                 ),
             )
@@ -241,6 +242,7 @@ class CautionDossierTest(
                     CautionDocumentType.SMS,
                     mapOf("devise" to "GNF", "montant" to "306000000", "dateOffre" to "2026-02-13", "dateExpiration" to "2026-05-13"),
                     dcm,
+                    nextSequence(CautionDocumentType.SMS),
                     dossierId = dossier.id,
                 ),
             )
