@@ -1,4 +1,15 @@
 server:
+  # The API is reached through the `web` service, which proxies /api/* to this
+  # container (see web/proxy.ts). Without this, every request arrives with the
+  # internal host (app:8080) and Spring reconstructs URLs from it: a browser call
+  # the user considers same-origin then looks cross-origin, so the CORS filter
+  # validates it against nimba.cors.allowed-origins and rejects every write with
+  # 403 "Invalid CORS request" (reads pass, because browsers only attach `Origin`
+  # to writes). Honoring the X-Forwarded-* headers the proxy sets restores the
+  # browser-facing origin, so same-origin calls are recognized as such and
+  # `Location` headers point at the public URL instead of app:8080. Only ever
+  # reachable through the proxy in a real deployment — do not publish this port.
+  forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:framework}
   servlet:
     session:
       # Session cookie carrying the authenticated DRI analyst (NIMBA-9). httpOnly
