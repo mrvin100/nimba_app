@@ -2,6 +2,9 @@ package com.nimba.caution.internal
 
 import com.nimba.caution.CautionClientSnapshotInfo
 import com.nimba.caution.CautionDocumentType
+import com.nimba.caution.CautionDossierInfo
+import com.nimba.caution.CautionFeeBase
+import com.nimba.caution.CautionFeeSchedule
 import com.nimba.caution.CautionFieldRegistry
 import com.nimba.caution.CautionInfo
 import com.nimba.caution.CautionModuleApi
@@ -31,6 +34,7 @@ import java.math.BigDecimal
 import java.math.BigInteger
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
+import java.text.Normalizer
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -112,8 +116,37 @@ class CautionDocxExportService(
         val dossier = caution.dossierId?.let { cautions.findDossier(it) } ?: return caution
         val commonKeys = CautionFieldRegistry.commonFields().map { it.key }.toSet()
         val common = dossier.content.filterKeys { it in commonKeys }
-        return caution.copy(content = CautionFieldRegistry.effectiveContent(common, caution.content))
+        val merged = CautionFieldRegistry.effectiveContent(common, caution.content).toMutableMap()
+        // The dossier's objet holds one line per declared lot; keep only this
+        // document's line so every renderer below stays unaware of the pairing.
+        objetForLot(dossier.content, caution.content["lot"])?.let { merged["objetMarche"] = it }
+        return caution.copy(content = merged)
     }
+
+    /**
+     * The objet wording that applies to [lot]. The dossier's objet field is a
+     * list parallel to its lots: line 1 describes lot 1, line 2 lot 2, and so
+     * on. A single line covers every lot (one common wording), and a lot with
+     * no matching line falls back to the first, so an incomplete list still
+     * produces a document rather than a blank.
+     */
+    private fun objetForLot(
+        dossierContent: Map<String, String>,
+        lot: String?,
+    ): String? {
+        val lines = objetLines(dossierContent)
+        if (lines.size <= 1) return lines.firstOrNull()
+        val index = declaredLots(dossierContent).indexOfFirst { it.equals(lot?.trim(), ignoreCase = true) }
+        return lines.getOrNull(index) ?: lines.first()
+    }
+
+    /** The objet field split into its per-lot lines, blanks dropped. */
+    private fun objetLines(content: Map<String, String>): List<String> =
+        content["objetMarche"]
+            ?.split("\n")
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            .orEmpty()
 
     /**
      * The live client record projected onto the same shape as the frozen snapshot,
@@ -150,10 +183,11 @@ class CautionDocxExportService(
             cautions.findDossier(dossierId)
                 ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Dossier introuvable")
         val snapshot = liveSnapshot(dossier.clientId, dossier.content["numeroCompte"])
+        val currency = lotAmountsOf(dossier).firstOrNull()?.currency ?: DEFAULT_CURRENCY
 
         val document = XWPFDocument()
-        setUpPage(document)
-        renderNotification(document, dossier.content, snapshot)
+        setUpPage(document, left = NOTIFICATION_MARGIN_LEFT, right = NOTIFICATION_MARGIN_RIGHT)
+        renderNotification(document, dossier.content, currency, snapshot)
 
         val bytes =
             ByteArrayOutputStream().use { out ->
@@ -179,8 +213,14 @@ class CautionDocxExportService(
         val client = clients.getOrThrow(dossier.clientId)
 
         val document = XWPFDocument()
-        setUpPage(document)
-        renderFiche(document, dossier.content, client, identity.organizationLogo())
+        setUpPage(
+            document,
+            left = FICHE_MARGIN_HORIZONTAL,
+            right = FICHE_MARGIN_HORIZONTAL,
+            top = FICHE_MARGIN_VERTICAL,
+            bottom = FICHE_MARGIN_VERTICAL,
+        )
+        renderFiche(document, dossier.content, lotAmountsOf(dossier), client, identity.organizationLogo())
 
         val bytes =
             ByteArrayOutputStream().use { out ->
@@ -189,6 +229,84 @@ class CautionDocxExportService(
                 out.toByteArray()
             }
         return CautionExport("fiche-approbation-${dossier.referenceNumber}-v${dossier.version}.docx", bytes)
+    }
+
+    /**
+     * What one lot of the request carries, read from the documents attached to
+     * the dossier rather than retyped on the Fiche: the caution issued for the
+     * lot (SMS) and the attestation issued for it (ACF/AFC). This is the single
+     * entry point the per-lot figures come from, so the Fiche's sollicitations
+     * and rentability can never disagree with the documents themselves.
+     */
+    private data class LotAmounts(
+        val label: String,
+        val currency: String,
+        val caution: BigDecimal?,
+        val attestation: BigDecimal?,
+    ) {
+        fun baseFor(base: CautionFeeBase): BigDecimal? =
+            when (base) {
+                CautionFeeBase.CAUTION -> caution
+                CautionFeeBase.ATTESTATION -> attestation
+            }
+    }
+
+    /** The lots a dossier declared, in the order they were entered. */
+    private fun declaredLots(content: Map<String, String>): List<String> =
+        content["lots"]
+            ?.split(",")
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            .orEmpty()
+
+    /**
+     * Buckets the dossier's documents by the lot each one covers. A dossier that
+     * declared no lot yields one unnamed bucket, so the Fiche keeps its single
+     * amount column. A dossier that declared exactly one lot puts every document
+     * in it whether or not they name it: there is nothing to disambiguate, and
+     * asking the analyst to tag each document would be pure ceremony.
+     */
+    private fun lotAmountsOf(dossier: CautionDossierInfo): List<LotAmounts> {
+        val documents = cautions.dossierDocuments(dossier.id)
+        val declared = declaredLots(dossier.content)
+        val unambiguous = declared.size <= 1
+        val buckets = declared.ifEmpty { listOf(SINGLE_LOT_LABEL) }
+        return buckets.map { lot ->
+            val ofLot =
+                documents.filter { document ->
+                    unambiguous || document.content["lot"]?.trim().equals(lot, ignoreCase = true)
+                }
+            LotAmounts(
+                label = lot,
+                currency = ofLot.firstNotNullOfOrNull { it.content["devise"]?.takeIf(String::isNotBlank) } ?: DEFAULT_CURRENCY,
+                caution = ofLot.firstOrNull { it.documentType == CautionDocumentType.SMS }?.let { amountOf(it.content) },
+                attestation =
+                    ofLot
+                        .firstOrNull {
+                            it.documentType == CautionDocumentType.ACF || it.documentType == CautionDocumentType.AFC
+                        }?.let { amountOf(it.content) },
+            )
+        }
+    }
+
+    /** A document's entered amount reduced to a number, tolerating the spaces it was typed with. */
+    private fun amountOf(content: Map<String, String>): BigDecimal? =
+        content["montant"]
+            ?.filter(Char::isDigit)
+            ?.takeIf { it.isNotEmpty() }
+            ?.toBigDecimal()
+
+    /** "Lot 1 : 238 756 476 ; Lot 2 : 190 000 000", or just the amount when the request has a single lot. */
+    private fun perLotClause(
+        lots: List<LotAmounts>,
+        amount: (LotAmounts) -> BigDecimal?,
+    ): String {
+        val entries = lots.filter { amount(it) != null }
+        if (entries.isEmpty()) return "RAS"
+        return entries.joinToString(" ; ") { lot ->
+            val value = "${lot.currency} ${grouped(requireNotNull(amount(lot)))}"
+            if (lot.label == SINGLE_LOT_LABEL) value else "${lot.label} : $value"
+        }
     }
 
     // ---- Caution de Soumission (SMS) ---------------------------------------------------
@@ -203,7 +321,7 @@ class CautionDocxExportService(
         headerBox(document, "CAUTION DE SOUMISSION", caution.referenceNumber)
         spacer(document)
 
-        boldCenteredLine(document, "AFRILAND FIRST BANK ; AGENCE ${agence.orRas()}")
+        boldCenteredLine(document, "AFRILAND FIRST BANK ; AGENCE ${agencyName(agence)}")
         boldCenteredLine(document, "BENEFICIAIRE : ${c["beneficiaire"].orRas()}")
         spacer(document)
         boldCenteredLine(document, "DATE : ${fmtShort(c["dateEmission"])}")
@@ -302,7 +420,7 @@ class CautionDocxExportService(
         faitLe.alignment = ParagraphAlignment.RIGHT
         addRun(faitLe, "Fait à Conakry, le ${fmtLong(c["dateEmission"])}", bold = true)
         spacer(document)
-        renderSignatureBlock(document, c)
+        renderSignatureBlock(document, c, withCivilityPrefix = true)
     }
 
     // ---- Attestation de Capacité Financière (ACF) --------------------------------------
@@ -557,13 +675,14 @@ class CautionDocxExportService(
     private fun renderNotification(
         document: XWPFDocument,
         content: Map<String, String>,
+        currency: String,
         snapshot: CautionClientSnapshotInfo,
     ) {
         val refDate = document.createTable(1, 2)
         refDate.setWidthType(TableWidthType.DXA)
-        refDate.setWidth(CONTENT_WIDTH)
+        refDate.setWidth(NOTIFICATION_CONTENT_WIDTH)
         borderless(refDate)
-        val half = (CONTENT_WIDTH / 2).toString()
+        val half = (NOTIFICATION_CONTENT_WIDTH / 2).toString()
         setCell(refDate.getRow(0).getCell(0), content["notifReference"].orRas(), alignment = ParagraphAlignment.LEFT, width = half)
         setCell(
             refDate.getRow(0).getCell(1),
@@ -584,7 +703,9 @@ class CautionDocxExportService(
         mixedParagraph(document, bold("V/Réf : ${content["vReference"].orRas()}"), alignment = ParagraphAlignment.LEFT)
         spacer(document)
 
-        paragraph(document, "Monsieur,")
+        // The salutation follows the recipient's own civility, never a fixed "Monsieur".
+        val salutation = content["destinataireCivilite"]?.takeIf { it.isNotBlank() } ?: "Monsieur"
+        paragraph(document, "$salutation,")
         paragraph(
             document,
             "Votre correspondance ci-dessus relative à la demande de ${content["demandeResume"].orRas()} dans notre " +
@@ -604,12 +725,11 @@ class CautionDocxExportService(
         mixedParagraph(document, bold("Garanties à recueillir : "))
         multilineParagraphs(document, content["garantiesARecueillir"])
 
+        // The very schedule the Fiche's section 6 computes from, printed as prose:
+        // the conditions the client is notified of and the ones the bank bills on
+        // are one and the same entry, never two.
         boldHeading(document, "III. CONDITIONS DE BANQUE :")
-        content["conditionsBanque"]
-            ?.split("\n")
-            ?.map { it.trim() }
-            ?.filter { it.isNotEmpty() }
-            ?.forEach { labelledLine(document, it) }
+        CautionFeeSchedule.linesOf(content).forEach { line -> labelledLine(document, "${line.describeAsCondition(currency)} ;") }
 
         paragraph(
             document,
@@ -621,10 +741,10 @@ class CautionDocxExportService(
         paragraph(
             document,
             "Espérant avoir répondu à vos attentes, nous réitérons nos remerciements pour l'intérêt porté à notre " +
-                "institution et vous prions d'agréer, Monsieur, l'expression de nos salutations distinguées.",
+                "institution et vous prions d'agréer, $salutation, l'expression de nos salutations distinguées.",
         )
         spacer(document)
-        renderSignatureBlock(document, content)
+        renderSignatureBlock(document, content, width = NOTIFICATION_CONTENT_WIDTH)
     }
 
     /** A right-aligned bold line, used for the recipient block of the notification. */
@@ -686,6 +806,7 @@ class CautionDocxExportService(
     private fun renderFiche(
         document: XWPFDocument,
         content: Map<String, String>,
+        lots: List<LotAmounts>,
         client: ClientInfo,
         logo: OrganizationLogo?,
     ) {
@@ -694,7 +815,7 @@ class CautionDocxExportService(
         logo?.let { renderLogo(logoParagraph, it) }
         val title = document.createParagraph()
         title.alignment = ParagraphAlignment.CENTER
-        addRun(title, "FICHE D'APPROBATION DE CAUTION DE SOUMISSION", bold = true, size = TITLE_SIZE)
+        addRun(title, "FICHE D'APPROBATION DE CAUTION DE SOUMISSION", bold = true, size = FICHE_TITLE_SIZE)
         spacer(document)
 
         val dateEntree = client.dateEntreeRelation?.format(DateTimeFormatter.ofPattern("dd/MM/uuuu"))
@@ -702,11 +823,11 @@ class CautionDocxExportService(
         ficheSection(document, "1- PRESENTATION DU CLIENT")
         ficheTable(
             document,
-            listOf(3600, CONTENT_WIDTH - 3600),
+            listOf(3600, FICHE_CONTENT_WIDTH - 3600),
             listOf(
                 listOf(FCell("CLIENT", bold = true), FCell(client.raisonSociale)),
                 listOf(FCell("COMPTE", bold = true), FCell(content["numeroCompte"].orRas())),
-                listOf(FCell("AGENCE", bold = true), FCell(client.agence.orRas())),
+                listOf(FCell("AGENCE", bold = true), FCell(agencyName(client.agence))),
                 listOf(FCell("GESTIONNAIRE", bold = true), FCell(client.gestionnaire.orRas())),
                 listOf(FCell("DATE ENTREE EN RELATION", bold = true), FCell(dateEntree.orRas())),
                 listOf(FCell("MOUVEMENT CONFIE", bold = true), FCell(content["mouvementConfie"].orRas())),
@@ -736,19 +857,21 @@ class CautionDocxExportService(
                 listOf(
                     FCell(content["referenceAppelOffres"].orRas()),
                     FCell(content["beneficiaire"].orRas()),
-                    FCell(content["objetMarche"].orRas()),
+                    FCell(ficheObjet(content)),
                 ),
             ),
         )
 
+        // Both rows read the documents attached to the dossier: the caution issued
+        // for each lot, and the attestation issued for it. Nothing is retyped here.
         ficheSection(document, "4- SOLLICITATIONS")
         ficheTable(
             document,
-            listOf(3600, CONTENT_WIDTH - 3600),
+            listOf(3600, FICHE_CONTENT_WIDTH - 3600),
             listOf(
                 headerCells(listOf("DESIGNATIONS", "MONTANT")),
-                listOf(FCell("CAUTION", bold = true), FCell(content["sollicitationCaution"].orRas())),
-                listOf(FCell("PROMESSE DE FACILITE", bold = true), FCell(content["sollicitationPromesse"].orRas())),
+                listOf(FCell("CAUTION", bold = true), FCell(perLotClause(lots) { it.caution })),
+                listOf(FCell("PROMESSE DE FACILITE", bold = true), FCell(perLotClause(lots) { it.attestation })),
             ),
         )
 
@@ -773,11 +896,11 @@ class CautionDocxExportService(
         )
 
         ficheSection(document, "6- CONDITIONS DE BANQUES ET RENTABILITE")
-        renderFicheConditions(document, content)
+        renderFicheConditions(document, content, lots)
 
         ficheSection(document, "7- APPROBATIONS")
         val approvers = listOf("AE", "DCM", "DRC", "DER", "EXCO")
-        val approvColumn = CONTENT_WIDTH / approvers.size
+        val approvColumn = FICHE_CONTENT_WIDTH / approvers.size
         ficheTable(
             document,
             List(approvers.size) { approvColumn },
@@ -786,49 +909,81 @@ class CautionDocxExportService(
     }
 
     /**
-     * Section 6's conditions/rentabilité table, one column per lot. The per-lot,
-     * per-condition amounts are entered on the dossier (the bank's fee formulas
-     * are not derivable from the samples); the TOTAL row is the computed column
-     * sum.
+     * Section 6's conditions/rentabilité table, one column per lot. Each cell is
+     * computed from the dossier's fee schedule applied to the lot's own amount
+     * (`max(base × taux, minimum) × (1 + tva)`), so the grid is never keyed in by
+     * hand and always agrees with the documents. The left column prints the rule
+     * itself, exactly as the paper model does. The TOTAL row is the column sum.
      */
     private fun renderFicheConditions(
         document: XWPFDocument,
         content: Map<String, String>,
+        lots: List<LotAmounts>,
     ) {
-        val lots =
-            content["lots"]
-                ?.split(",")
-                ?.map { it.trim() }
-                ?.filter { it.isNotEmpty() }
-                ?.takeIf { it.isNotEmpty() }
-                ?: listOf("Montant")
-        val conditionLabels = listOf("COM ENG", "F. CAUTION", "F. DELIVRANCE", "F. ATTESTATION")
+        val schedule = CautionFeeSchedule.linesOf(content)
         val labelColumn = 3400
-        val lotColumn = (CONTENT_WIDTH - labelColumn) / lots.size
+        val lotColumn = (FICHE_CONTENT_WIDTH - labelColumn) / lots.size
         val widths = listOf(labelColumn) + List(lots.size) { lotColumn }
+        val currency = lots.firstOrNull()?.currency ?: DEFAULT_CURRENCY
 
         val rows = mutableListOf<List<FCell>>()
-        rows.add(headerCells(listOf("CONDITIONS DE BANQUE") + lots.map { "MT TTC $it" }))
-        conditionLabels.forEachIndexed { r, label ->
-            rows.add(listOf(FCell(label)) + lots.indices.map { l -> FCell(content["cond_${r}_$l"].orRas()) })
+        rows.add(
+            headerCells(
+                listOf("CONDITIONS DE BANQUE") +
+                    lots.map { if (it.label == SINGLE_LOT_LABEL) "MT TTC" else "MT TTC ${it.label}" },
+            ),
+        )
+        val computed =
+            schedule.map { line ->
+                line to lots.map { lot -> lot.baseFor(line.base)?.let(line::amountFor) }
+            }
+        computed.forEach { (line, amounts) ->
+            rows.add(listOf(FCell(line.describe(currency))) + amounts.map { FCell(it?.let(::grouped) ?: "0") })
         }
-        val totals =
+        rows.add(
             listOf(FCell("TOTAL", bold = true)) +
-                lots.indices.map { l ->
-                    FCell(sumGrouped(conditionLabels.indices.map { r -> content["cond_${r}_$l"] }), bold = true)
-                }
-        rows.add(totals)
+                lots.indices.map { column ->
+                    val total =
+                        computed.fold(BigDecimal.ZERO) { acc, (_, amounts) -> acc + (amounts[column] ?: BigDecimal.ZERO) }
+                    FCell(grouped(total), bold = true)
+                },
+        )
         ficheTable(document, widths, rows)
     }
+
+    /**
+     * Section 3's OBJET, worded as the paper model does: the objet followed by
+     * the lots it covers, `… : Lot 4, Lot 6 et Lot 8.`. When each lot carries
+     * its own wording (one objet line per lot), they are listed lot by lot
+     * instead, since no single sentence would cover them.
+     */
+    private fun ficheObjet(content: Map<String, String>): String {
+        val lines = objetLines(content)
+        val lots = declaredLots(content)
+        if (lines.isEmpty()) return "RAS"
+        if (lots.isEmpty()) return lines.joinToString(" ; ")
+        if (lines.distinct().size == 1) return "${lines.first()} : ${enumerate(lots)}."
+        return lots
+            .mapIndexed { index, lot -> "$lot : ${lines.getOrNull(index) ?: lines.first()}" }
+            .joinToString(" ; ")
+    }
+
+    /** "Lot 4, Lot 6 et Lot 8" — the enumeration style the paper templates use. */
+    private fun enumerate(values: List<String>): String =
+        if (values.size <= 1) {
+            values.joinToString("")
+        } else {
+            "${values.dropLast(1).joinToString(", ")} et ${values.last()}"
+        }
 
     private fun ficheSection(
         document: XWPFDocument,
         title: String,
     ) {
         val p = document.createParagraph()
-        p.spacingBefore = 160
-        p.spacingAfter = 60
-        addRun(p, title, bold = true)
+        p.spacingBefore = 90
+        p.spacingAfter = 30
+        addRun(p, title, bold = true, size = FICHE_BODY_SIZE)
     }
 
     /** Builds a thin-bordered table with fixed column widths (DXA) from rows of styled cells. */
@@ -849,8 +1004,9 @@ class CautionDocxExportService(
                 tc.setWidth(widths[c].toString())
                 val p = tc.paragraphs.first()
                 p.alignment = cell.alignment
+                p.spacingBefore = 0
                 p.spacingAfter = 0
-                addRun(p, cell.text, bold = cell.bold)
+                addRun(p, cell.text, bold = cell.bold, size = FICHE_BODY_SIZE)
             }
         }
     }
@@ -868,8 +1024,8 @@ class CautionDocxExportService(
         )
 
     private fun thirds(): List<Int> {
-        val third = CONTENT_WIDTH / 3
-        return listOf(third, third, CONTENT_WIDTH - 2 * third)
+        val third = FICHE_CONTENT_WIDTH / 3
+        return listOf(third, third, FICHE_CONTENT_WIDTH - 2 * third)
     }
 
     private fun sumGrouped(values: List<String?>): String {
@@ -946,25 +1102,84 @@ class CautionDocxExportService(
     }
 
     /**
+     * Upper-cases the way the bank's templates do: without diacritics. Word's
+     * own "Majuscules" effect keeps them, but every reference document prints
+     * "DIRECTEUR CREDIT MARKETING", not "DIRECTEUR CRÉDIT MARKETING", so a plain
+     * [String.uppercase] would not match the paper.
+     */
+    private fun upperCaseUnaccented(text: String): String =
+        Normalizer
+            .normalize(text, Normalizer.Form.NFD)
+            .replace(DIACRITICS, "")
+            .uppercase()
+
+    /**
+     * An agency's name as the templates print it: upper-cased, and without the
+     * "Agence" word when the client record already carries it, so a value typed
+     * as "Agence Kaloum" never renders the line as "AGENCE AGENCE KALOUM".
+     */
+    private fun agencyName(agence: String?): String {
+        val name = upperCaseUnaccented(agence.orRas().trim())
+        return name.removePrefix("AGENCE ").trim().ifEmpty { name }
+    }
+
+    /**
+     * "M." / "Mme." — the abbreviated civility the caution's signature block
+     * prefixes its names with. An unset or unrecognized civility yields no
+     * prefix rather than a placeholder, same rule as [signatoryLabel].
+     */
+    private fun civilityAbbreviation(civility: String?): String =
+        when (civility?.trim()?.lowercase()) {
+            "monsieur" -> "M. "
+            "madame" -> "Mme. "
+            else -> ""
+        }
+
+    /**
      * The closing signature block: a full page-width, borderless two-column
      * table. Row 1 holds the two signatories' titles, row 2 their names, all
      * bold. Signatory 1 is pinned left, signatory 2 right, and a generous gap
      * is left between the two rows so the signatures can be handwritten there.
+     *
+     * Every reference template prints the titles in upper case, whatever the
+     * casing they were entered with. [withCivilityPrefix] adds the "M."/"Mme."
+     * abbreviation in front of the names: the caution model carries it, the
+     * attestations and the notification do not.
      */
     private fun renderSignatureBlock(
         document: XWPFDocument,
         content: Map<String, String>,
+        withCivilityPrefix: Boolean = false,
+        width: Int = CONTENT_WIDTH,
     ) {
         val table = document.createTable(2, 2)
         table.setWidthType(TableWidthType.DXA)
-        table.setWidth(CONTENT_WIDTH)
+        table.setWidth(width)
         borderless(table)
-        val half = (CONTENT_WIDTH / 2).toString()
-        setCell(table.getRow(0).getCell(0), signatoryTitle(content, 1), bold = true, alignment = ParagraphAlignment.LEFT, width = half)
-        setCell(table.getRow(0).getCell(1), signatoryTitle(content, 2), bold = true, alignment = ParagraphAlignment.RIGHT, width = half)
+        val half = (width / 2).toString()
+
+        fun name(index: Int): String {
+            val prefix = if (withCivilityPrefix) civilityAbbreviation(content["signataire${index}Civilite"]) else ""
+            return "$prefix${signatoryName(content, index)}"
+        }
+
+        setCell(
+            table.getRow(0).getCell(0),
+            upperCaseUnaccented(signatoryTitle(content, 1)),
+            bold = true,
+            alignment = ParagraphAlignment.LEFT,
+            width = half,
+        )
+        setCell(
+            table.getRow(0).getCell(1),
+            upperCaseUnaccented(signatoryTitle(content, 2)),
+            bold = true,
+            alignment = ParagraphAlignment.RIGHT,
+            width = half,
+        )
         setCell(
             table.getRow(1).getCell(0),
-            signatoryName(content, 1),
+            name(1),
             bold = true,
             alignment = ParagraphAlignment.LEFT,
             width = half,
@@ -972,7 +1187,7 @@ class CautionDocxExportService(
         )
         setCell(
             table.getRow(1).getCell(1),
-            signatoryName(content, 2),
+            name(2),
             bold = true,
             alignment = ParagraphAlignment.RIGHT,
             width = half,
@@ -1053,16 +1268,28 @@ class CautionDocxExportService(
 
     // ---- POI helpers (same conventions as the FA/PV/FMP exports) -----------------------
 
-    private fun setUpPage(document: XWPFDocument) {
+    /**
+     * A4 with the given margins, in twips. The caution and the attestations use
+     * the templates' defaults; the notification widens its left margin to clear
+     * the pre-printed band of the bank's letterhead, and the fiche narrows every
+     * margin to stay on a single sheet. See the *_MARGIN constants.
+     */
+    private fun setUpPage(
+        document: XWPFDocument,
+        left: Int = MARGIN_LEFT,
+        right: Int = MARGIN_RIGHT,
+        top: Int = MARGIN_VERTICAL,
+        bottom: Int = MARGIN_VERTICAL,
+    ) {
         val sectPr = document.document.body.addNewSectPr()
         val pageSize = sectPr.addNewPgSz()
-        pageSize.w = BigInteger.valueOf(11906)
-        pageSize.h = BigInteger.valueOf(16838)
+        pageSize.w = BigInteger.valueOf(PAGE_WIDTH.toLong())
+        pageSize.h = BigInteger.valueOf(PAGE_HEIGHT.toLong())
         val margins = sectPr.addNewPgMar()
-        margins.left = BigInteger.valueOf(1417)
-        margins.right = BigInteger.valueOf(1133)
-        margins.top = BigInteger.valueOf(1417)
-        margins.bottom = BigInteger.valueOf(1417)
+        margins.left = BigInteger.valueOf(left.toLong())
+        margins.right = BigInteger.valueOf(right.toLong())
+        margins.top = BigInteger.valueOf(top.toLong())
+        margins.bottom = BigInteger.valueOf(bottom.toLong())
     }
 
     private fun addRun(
@@ -1177,8 +1404,33 @@ class CautionDocxExportService(
         const val BODY_SIZE = 11
         const val TITLE_SIZE = 14
 
-        /** Writable page width in twips: A4 (11906) minus the left (1417) and right (1133) margins set in [setUpPage]. */
-        const val CONTENT_WIDTH = 9356
+        const val PAGE_WIDTH = 11906
+        const val PAGE_HEIGHT = 16838
+
+        const val MARGIN_LEFT = 1417
+        const val MARGIN_RIGHT = 1133
+        const val MARGIN_VERTICAL = 1417
+
+        /** Writable page width in twips: A4 minus the default left/right margins. */
+        const val CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT
+
+        /**
+         * The notification is printed on the bank's letterhead, whose pre-printed
+         * band runs down the left edge. `NOTIFICATION.docx` clears it by indenting
+         * its body a further 1418 twips beyond the 1417 margin and letting the text
+         * run 624 into the right margin; reproduced here as plain page margins so
+         * every paragraph lands in the same block without per-paragraph indents.
+         */
+        const val NOTIFICATION_MARGIN_LEFT = 2835
+        const val NOTIFICATION_MARGIN_RIGHT = 793
+        const val NOTIFICATION_CONTENT_WIDTH = PAGE_WIDTH - NOTIFICATION_MARGIN_LEFT - NOTIFICATION_MARGIN_RIGHT
+
+        /** The fiche is an internal one-sheet form: tighter margins, smaller type, so its seven sections never spill onto a second page. */
+        const val FICHE_MARGIN_HORIZONTAL = 1134
+        const val FICHE_MARGIN_VERTICAL = 851
+        const val FICHE_CONTENT_WIDTH = PAGE_WIDTH - 2 * FICHE_MARGIN_HORIZONTAL
+        const val FICHE_BODY_SIZE = 9
+        const val FICHE_TITLE_SIZE = 12
 
         /** The attestation model's header box width in twips (page-centered, narrower than the caution's full-width banner). */
         const val ACF_HEADER_WIDTH = 7896
@@ -1190,6 +1442,15 @@ class CautionDocxExportService(
         const val SIGNATURE_GAP = 900
 
         /** Height (px) of the organisation logo banner at the head of the Fiche d'approbation; the width follows the image's aspect ratio. */
-        const val FICHE_LOGO_HEIGHT_PX = 55
+        const val FICHE_LOGO_HEIGHT_PX = 38
+
+        /** The single, unnamed bucket a request that declared no lot falls into — its Fiche keeps one amount column. */
+        const val SINGLE_LOT_LABEL = ""
+
+        /** The currency a dossier's figures default to when no document has stated one yet. */
+        const val DEFAULT_CURRENCY = "GNF"
+
+        /** Combining marks left behind by NFD normalization, stripped so an upper-cased title matches the paper templates. */
+        val DIACRITICS = "\\p{M}+".toRegex()
     }
 }
