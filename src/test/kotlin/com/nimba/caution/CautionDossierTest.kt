@@ -521,6 +521,46 @@ class CautionDossierTest(
     }
 
     @Test
+    fun `an unfilled notification prints RAS and the blank reference, never an empty section`() {
+        val dcm = dcmMemberId()
+        val client = clients.create(CreateClientCommand("M-${UUID.randomUUID()}", "SOCIETE MINIERE DE BOKE SA", dcm)).id
+        val dossier =
+            cautions.createDossier(
+                CreateDossierCommand(
+                    clientId = client,
+                    sequence = nextDossierSequence(),
+                    content =
+                        mapOf(
+                            "dateEmission" to "2026-08-20",
+                            // A feminine title must not print as "A l'Attention du Directrice".
+                            "destinataireCivilite" to "Madame",
+                            "destinataireFonction" to "Directrice Administrative",
+                            "destinataireNom" to "Aïssatou Bah",
+                            "demandeResume" to "Caution de soumission pour l'entretien de la voie ferrée.",
+                            // Deliberately left blank: notifReference, vReference, articulation, garanties.
+                            "signataire1Nom" to "QUENTIN DETCHENOU",
+                            "signataire1Titre" to "Directeur Crédit Marketing",
+                            "signataire2Nom" to "FANNY SOUMAH",
+                            "signataire2Titre" to "Directrice Générale Adjointe",
+                        ),
+                    createdBy = dcm,
+                ),
+            )
+
+        val text = docText(export.exportDossierNotification(dossier.id).content)
+
+        assertContains(text, "A l'Attention de la Directrice Administrative")
+        assertContains(text, "Madame,")
+        // An unset letter reference prints the paper form's blank, not "RAS".
+        assertContains(text, "/AFB/DCM/DGA/")
+        // An unset customer reference drops its line entirely.
+        assertTrue(!text.contains("V/Réf"))
+        // No heading is ever left with nothing under it.
+        assertContains(text, "Garanties détenues : RAS")
+        assertContains(text, "Garanties à recueillir : RAS")
+    }
+
+    @Test
     fun `the notification clears the letterhead's pre-printed left band`() {
         val dcm = dcmMemberId()
         val client = clients.create(CreateClientCommand("M-${UUID.randomUUID()}", "SOCIETE GUINEE BATI BUSINESS SARL", dcm)).id
