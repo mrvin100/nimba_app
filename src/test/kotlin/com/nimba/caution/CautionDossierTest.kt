@@ -287,8 +287,6 @@ class CautionDossierTest(
                                 "Trois (03) attestations de facilité de crédit de GNF 4 000 000 000 : LOT4, LOT6 et Lot8.",
                             "garantiesDetenues" to "RAS",
                             "garantiesARecueillir" to "Signature de trois (03) traites.",
-                            "conditionsBanque" to
-                                "Com. d'engagement : 1% Flat HT min GNF 1 000 000 ;\nFrais de délivrance : 0,1% HT min GNF 500 000 ;",
                             "signataire1Nom" to "QUENTIN DETCHENOU",
                             "signataire1Titre" to "Directeur Crédit Marketing",
                             "signataire2Nom" to "FANNY SOUMAH",
@@ -316,8 +314,96 @@ class CautionDossierTest(
         assertContains(text, "II. GARANTIES RETENUES :")
         assertContains(text, "Signature de trois (03) traites.")
         assertContains(text, "III. CONDITIONS DE BANQUE :")
-        assertContains(text, "Com. d'engagement :")
+        // The conditions are printed from the dossier's fee schedule, not from a
+        // free-text field: the letter and the Fiche state the same rule by construction.
+        assertContains(text, "Com. d'engagement : 1% Min GNF 1 000 000 ;")
+        assertContains(text, "Frais de délivrance : 0,1% Min GNF 500 000 ;")
         assertContains(text, "QUENTIN DETCHENOU")
+    }
+
+    @Test
+    fun `each lot takes the objet line at its own rank, and a single line covers them all`() {
+        val dcm = dcmMemberId()
+        val client = clients.create(CreateClientCommand("M-${UUID.randomUUID()}", "SOCIETE GUINEE BATI BUSINESS SARL", dcm)).id
+        val dossier =
+            cautions.createDossier(
+                CreateDossierCommand(
+                    clientId = client,
+                    sequence = nextDossierSequence(),
+                    content =
+                        mapOf(
+                            "beneficiaire" to "MINISTERE DE L'ELEVAGE",
+                            "referenceAppelOffres" to "N°01/MAGEL/DNAPA/PRMP/2026",
+                            // One line per lot, in the same order as "lots".
+                            "objetMarche" to
+                                "Travaux de construction d'un marché à bétail a Kankan Lot4\n" +
+                                "Travaux de construction d'un marché à bétail a N'zérékoré Lot8",
+                            "dateEmission" to "2026-07-21",
+                            "lots" to "Lot 4, Lot 8",
+                            "signataire1Nom" to "QUENTIN DETCHENOU",
+                            "signataire1Titre" to "Directeur Crédit Marketing",
+                            "signataire2Nom" to "FANNY SOUMAH",
+                            "signataire2Titre" to "Directrice Générale Adjointe",
+                        ),
+                    createdBy = dcm,
+                ),
+            )
+
+        fun afcFor(lot: String) =
+            cautions.create(
+                CreateCautionCommand(
+                    clientId = client,
+                    documentType = CautionDocumentType.AFC,
+                    dossierId = dossier.id,
+                    content = mapOf("lot" to lot, "devise" to "GNF", "montant" to "4 000 000 000"),
+                    createdBy = dcm,
+                    sequence = cautions.suggestNextSequence(CautionDocumentType.AFC),
+                ),
+            )
+
+        // Each document picks the objet line at its lot's rank, nothing retyped on it.
+        val lot4Text = docText(export.export(afcFor("Lot 4").id).content)
+        assertContains(lot4Text, "Travaux de construction d'un marché à bétail a Kankan Lot4")
+        assertTrue(!lot4Text.contains("N'zérékoré"))
+
+        val lot8Text = docText(export.export(afcFor("Lot 8").id).content)
+        assertContains(lot8Text, "Travaux de construction d'un marché à bétail a N'zérékoré Lot8")
+        assertTrue(!lot8Text.contains("Kankan"))
+
+        // Section 3 lists them lot by lot when the wordings differ.
+        val fiche = docText(export.exportDossierFiche(dossier.id).content)
+        assertContains(fiche, "Lot 4 : Travaux de construction d'un marché à bétail a Kankan Lot4")
+        assertContains(fiche, "Lot 8 : Travaux de construction d'un marché à bétail a N'zérékoré Lot8")
+    }
+
+    @Test
+    fun `a single objet line covers every lot and section 3 enumerates them`() {
+        val dcm = dcmMemberId()
+        val client = clients.create(CreateClientCommand("M-${UUID.randomUUID()}", "SOCIETE GUINEE BATI BUSINESS SARL", dcm)).id
+        val dossier =
+            cautions.createDossier(
+                CreateDossierCommand(
+                    clientId = client,
+                    sequence = nextDossierSequence(),
+                    content =
+                        mapOf(
+                            "beneficiaire" to "MINISTERE DE L'ELEVAGE",
+                            "referenceAppelOffres" to "N°01/MAGEL/DNAPA/PRMP/2026",
+                            "objetMarche" to "Travaux de construction de dix marchés à bétails en dix (10) lots distincts",
+                            "dateEmission" to "2026-07-21",
+                            "lots" to "Lot 4, Lot 6, Lot 8",
+                            "signataire1Nom" to "QUENTIN DETCHENOU",
+                            "signataire1Titre" to "Directeur Crédit Marketing",
+                            "signataire2Nom" to "FANNY SOUMAH",
+                            "signataire2Titre" to "Directrice Générale Adjointe",
+                        ),
+                    createdBy = dcm,
+                ),
+            )
+
+        // Worded as the paper model: the objet, then the lots it covers.
+        val fiche = docText(export.exportDossierFiche(dossier.id).content)
+        assertContains(fiche, "Travaux de construction de dix marchés à bétails en dix (10) lots distincts : Lot 4, Lot 6 et Lot 8.")
     }
 
     @Test
@@ -349,20 +435,45 @@ class CautionDossierTest(
                             "mouvementConfie" to "1 136 805 909",
                             "solde" to "8 721 004",
                             "soldeDate" to "22/07/2025",
-                            "sollicitationCaution" to "Lot 4 : 306 000 000",
                             "engSoumissionEncours" to "987 828 828",
                             "engSoumissionSollicite" to "306 000 000",
                             "engTresorerieEncours" to "0",
                             "engTresorerieSollicite" to "0",
                             "lots" to "Lot 4, Lot 6, Lot 8",
-                            "cond_0_0" to "3 457 800",
-                            "cond_1_0" to "3 610 800",
-                            "cond_2_0" to "565 000",
-                            "cond_3_0" to "4 720 000",
                         ),
                     createdBy = dcm,
                 ),
             )
+
+        // Lot 4 carries a caution and an attestation; the Fiche's per-lot figures
+        // must come from these two documents, with nothing keyed in on the dossier.
+        cautions.create(
+            CreateCautionCommand(
+                clientId = client,
+                documentType = CautionDocumentType.SMS,
+                dossierId = dossier.id,
+                content =
+                    mapOf(
+                        "lot" to "Lot 4",
+                        "devise" to "GNF",
+                        "montant" to "306 000 000",
+                        "dateOffre" to "2026-07-13",
+                        "dateExpiration" to "2026-10-13",
+                    ),
+                createdBy = dcm,
+                sequence = cautions.suggestNextSequence(CautionDocumentType.SMS),
+            ),
+        )
+        cautions.create(
+            CreateCautionCommand(
+                clientId = client,
+                documentType = CautionDocumentType.AFC,
+                dossierId = dossier.id,
+                content = mapOf("lot" to "Lot 4", "devise" to "GNF", "montant" to "4 000 000 000"),
+                createdBy = dcm,
+                sequence = cautions.suggestNextSequence(CautionDocumentType.AFC),
+            ),
+        )
 
         val result = export.exportDossierFiche(dossier.id)
         val text = docText(result.content)
@@ -372,10 +483,65 @@ class CautionDossierTest(
         assertContains(text, "SOCIETE GUINEE BATI BUSINESS SARL")
         assertContains(text, "DGA3")
         assertContains(text, "20/02/2020")
+
+        // Section 4 is derived from the attached documents, never retyped.
+        assertContains(text, "4- SOLLICITATIONS")
+        assertContains(text, "Lot 4 : GNF 306 000 000")
+        assertContains(text, "Lot 4 : GNF 4 000 000 000")
+
+        // Section 6 reproduces the reference FICHE APPROBATION.docx line for line:
+        // max(montant x taux, minimum) x (1 + tva), on the lot's own documents.
         assertContains(text, "6- CONDITIONS DE BANQUES ET RENTABILITE")
         assertContains(text, "MT TTC Lot 4")
-        // Computed column total for Lot 4: 3 457 800 + 3 610 800 + 565 000 + 4 720 000.
+        assertContains(text, "COM ENG = 1% Min GNF 1 000 000")
+        assertContains(text, "3 457 800")
+        assertContains(text, "3 610 800")
+        assertContains(text, "565 000")
+        assertContains(text, "4 720 000")
         assertContains(text, "12 353 600")
         assertContains(text, "7- APPROBATIONS")
+
+        // The fiche is a one-sheet internal form: narrow margins and 9pt type are
+        // what keep its seven sections on a single page (verified at 3 lots / 6
+        // documents, the worst case the DCM produces).
+        XWPFDocument(ByteArrayInputStream(result.content)).use { doc ->
+            val margins = doc.document.body.sectPr.pgMar
+            assertEquals(1134, margins.left.toString().toInt())
+            assertEquals(1134, margins.right.toString().toInt())
+            assertEquals(851, margins.top.toString().toInt())
+            assertEquals(851, margins.bottom.toString().toInt())
+            val runs =
+                doc.tables
+                    .flatMap { it.rows }
+                    .flatMap { it.tableCells }
+                    .flatMap { it.paragraphs }
+                    .flatMap { it.runs }
+            assertTrue(runs.isNotEmpty() && runs.all { it.fontSizeAsDouble == 9.0 })
+        }
+    }
+
+    @Test
+    fun `the notification clears the letterhead's pre-printed left band`() {
+        val dcm = dcmMemberId()
+        val client = clients.create(CreateClientCommand("M-${UUID.randomUUID()}", "SOCIETE GUINEE BATI BUSINESS SARL", dcm)).id
+        val dossier =
+            cautions.createDossier(
+                CreateDossierCommand(
+                    clientId = client,
+                    sequence = nextDossierSequence(),
+                    content = mapOf("dateEmission" to "2026-07-21", "destinataireNom" to "Mr Kalil Kourouma"),
+                    createdBy = dcm,
+                ),
+            )
+
+        val result = export.exportDossierNotification(dossier.id)
+
+        // Matches NOTIFICATION.docx's text block: its 1417 margin plus the 1418
+        // indent every body paragraph carries, and the 624 it reclaims on the right.
+        XWPFDocument(ByteArrayInputStream(result.content)).use { doc ->
+            val margins = doc.document.body.sectPr.pgMar
+            assertEquals(2835, margins.left.toString().toInt())
+            assertEquals(793, margins.right.toString().toInt())
+        }
     }
 }
