@@ -186,7 +186,13 @@ class CautionDocxExportService(
         val currency = lotAmountsOf(dossier).firstOrNull()?.currency ?: DEFAULT_CURRENCY
 
         val document = XWPFDocument()
-        setUpPage(document, left = NOTIFICATION_MARGIN_LEFT, right = NOTIFICATION_MARGIN_RIGHT)
+        setUpPage(
+            document,
+            left = NOTIFICATION_MARGIN_LEFT,
+            right = NOTIFICATION_MARGIN_RIGHT,
+            top = NOTIFICATION_MARGIN_VERTICAL,
+            bottom = NOTIFICATION_MARGIN_VERTICAL,
+        )
         renderNotification(document, dossier.content, currency, snapshot)
 
         val bytes =
@@ -683,47 +689,66 @@ class CautionDocxExportService(
         refDate.setWidth(NOTIFICATION_CONTENT_WIDTH)
         borderless(refDate)
         val half = (NOTIFICATION_CONTENT_WIDTH / 2).toString()
-        setCell(refDate.getRow(0).getCell(0), content["notifReference"].orRas(), alignment = ParagraphAlignment.LEFT, width = half)
+        setCell(refDate.getRow(0).getCell(0), notificationReference(content), alignment = ParagraphAlignment.LEFT, width = half)
         setCell(
             refDate.getRow(0).getCell(1),
             "Conakry, le ${fmtLong(content["dateEmission"])}",
             alignment = ParagraphAlignment.RIGHT,
             width = half,
         )
-        spacer(document)
 
         rightBoldLine(document, snapshot.raisonSociale.orRas())
-        rightBoldLine(document, "A l'Attention du ${content["destinataireFonction"] ?: "Directeur Général"}")
-        rightBoldLine(document, content["destinataireNom"].orRas())
+        rightBoldLine(document, recipientAttention(content))
+        content["destinataireNom"]?.takeIf { it.isNotBlank() }?.let { rightBoldLine(document, it) }
         spacer(document)
 
         // Fixed boilerplate on the real paper template (docs/caution/NOTIFICATION.docx) —
         // never the tender's own subject, which appears later in the body paragraph.
-        mixedParagraph(document, bold("Objet : Notification de caution"), alignment = ParagraphAlignment.LEFT)
-        mixedParagraph(document, bold("V/Réf : ${content["vReference"].orRas()}"), alignment = ParagraphAlignment.LEFT)
+        mixedParagraph(
+            document,
+            bold("Objet : Notification de caution"),
+            alignment = ParagraphAlignment.LEFT,
+            spacingAfter = LETTER_SPACING_AFTER,
+        )
+        // A letter with no customer reference simply omits the line; the model never prints a placeholder there.
+        content["vReference"]?.takeIf { it.isNotBlank() }?.let {
+            mixedParagraph(document, bold("V/Réf : $it"), alignment = ParagraphAlignment.LEFT, spacingAfter = LETTER_SPACING_AFTER)
+        }
         spacer(document)
 
         // The salutation follows the recipient's own civility, never a fixed "Monsieur".
         val salutation = content["destinataireCivilite"]?.takeIf { it.isNotBlank() } ?: "Monsieur"
-        paragraph(document, "$salutation,")
+        paragraph(document, "$salutation,", spacingAfter = LETTER_SPACING_AFTER)
         paragraph(
             document,
             "Votre correspondance ci-dessus relative à la demande de ${content["demandeResume"].orRas()} dans notre " +
                 "institution financière a retenu toute notre attention et nous vous en remercions.",
+            spacingAfter = LETTER_SPACING_AFTER,
         )
         paragraph(
             document,
             "Y faisant suite, nous avons le plaisir de vous confirmer que notre comité de crédit compétent pour votre " +
                 "dossier a marqué son accord pour votre concours aux conditions suivantes :",
+            spacingAfter = LETTER_SPACING_AFTER,
         )
 
         boldHeading(document, "ARTICULATION DES CONCOURS :")
-        multilineParagraphs(document, content["articulationConcours"])
+        multilineParagraphsOrRas(document, content["articulationConcours"])
 
         boldHeading(document, "II. GARANTIES RETENUES :")
-        mixedParagraph(document, bold("Garanties détenues : "), plain(content["garantiesDetenues"] ?: "RAS"))
-        mixedParagraph(document, bold("Garanties à recueillir : "))
-        multilineParagraphs(document, content["garantiesARecueillir"])
+        mixedParagraph(
+            document,
+            bold("Garanties détenues : "),
+            plain(content["garantiesDetenues"].orRas()),
+            spacingAfter = LETTER_SPACING_AFTER,
+        )
+        val toCollect = content["garantiesARecueillir"]?.takeIf { it.isNotBlank() }
+        if (toCollect == null) {
+            mixedParagraph(document, bold("Garanties à recueillir : "), plain("RAS"), spacingAfter = LETTER_SPACING_AFTER)
+        } else {
+            mixedParagraph(document, bold("Garanties à recueillir : "), spacingAfter = LETTER_SPACING_AFTER)
+            multilineParagraphs(document, toCollect)
+        }
 
         // The very schedule the Fiche's section 6 computes from, printed as prose:
         // the conditions the client is notified of and the ones the bank bills on
@@ -736,15 +761,48 @@ class CautionDocxExportService(
             "Pour la bonne règle, nous vous remercions de bien vouloir accuser réception de la présente, en nous " +
                 "retournant la copie ci-jointe, dûment revêtue de votre signature, et précédée de la mention " +
                 "« lu et approuvé, bon pour toutes les clauses ci-dessus ».",
+            spacingAfter = LETTER_SPACING_AFTER,
         )
-        paragraph(document, "Nous restons à votre entière disposition pour toutes informations complémentaires.")
+        paragraph(
+            document,
+            "Nous restons à votre entière disposition pour toutes informations complémentaires.",
+            spacingAfter = LETTER_SPACING_AFTER,
+        )
         paragraph(
             document,
             "Espérant avoir répondu à vos attentes, nous réitérons nos remerciements pour l'intérêt porté à notre " +
                 "institution et vous prions d'agréer, $salutation, l'expression de nos salutations distinguées.",
+            spacingAfter = LETTER_SPACING_AFTER,
         )
-        spacer(document)
-        renderSignatureBlock(document, content, width = NOTIFICATION_CONTENT_WIDTH)
+        renderSignatureBlock(document, content, width = NOTIFICATION_CONTENT_WIDTH, gap = NOTIFICATION_SIGNATURE_GAP)
+    }
+
+    /**
+     * The letter's own reference. Unset, the model's blank pattern is printed for
+     * the DCM to complete by hand (`N°/    /AFB/DCM/DGA/26`) rather than a "RAS",
+     * which would read as "this letter has no reference".
+     */
+    private fun notificationReference(content: Map<String, String>): String =
+        content["notifReference"]?.takeIf { it.isNotBlank() }
+            ?: "N°/        /AFB/DCM/DGA/${LocalDate.now().format(DateTimeFormatter.ofPattern("uu"))}"
+
+    /**
+     * "A l'Attention du Directeur Général" / "de la Directrice Administrative" —
+     * the article follows the recipient's civility, so a feminine title never
+     * prints as "du Directrice".
+     */
+    private fun recipientAttention(content: Map<String, String>): String {
+        val fonction = content["destinataireFonction"]?.takeIf { it.isNotBlank() } ?: "Directeur Général"
+        val article = if (content["destinataireCivilite"]?.trim().equals("Madame", ignoreCase = true)) "de la" else "du"
+        return "A l'Attention $article $fonction"
+    }
+
+    /** Like [multilineParagraphs], but prints "RAS" rather than leaving a heading with nothing under it. */
+    private fun multilineParagraphsOrRas(
+        document: XWPFDocument,
+        value: String?,
+    ) {
+        if (value.isNullOrBlank()) paragraph(document, "RAS", spacingAfter = LETTER_SPACING_AFTER) else multilineParagraphs(document, value)
     }
 
     /** A right-aligned bold line, used for the recipient block of the notification. */
@@ -754,6 +812,7 @@ class CautionDocxExportService(
     ) {
         val p = document.createParagraph()
         p.alignment = ParagraphAlignment.RIGHT
+        p.spacingAfter = LETTER_SPACING_AFTER
         addRun(p, text, bold = true)
     }
 
@@ -764,8 +823,8 @@ class CautionDocxExportService(
     ) {
         val p = document.createParagraph()
         p.alignment = ParagraphAlignment.BOTH
-        p.spacingBefore = 120
-        p.spacingAfter = 80
+        p.spacingBefore = 90
+        p.spacingAfter = 40
         addRun(p, text, bold = true)
     }
 
@@ -778,7 +837,7 @@ class CautionDocxExportService(
             ?.split("\n")
             ?.map { it.trim() }
             ?.filter { it.isNotEmpty() }
-            ?.forEach { paragraph(document, it) }
+            ?.forEach { paragraph(document, it, spacingAfter = LETTER_SPACING_AFTER) }
     }
 
     /** A line whose label (up to and including the first colon) is bold, the rest plain — the notification's condition lines. */
@@ -788,9 +847,14 @@ class CautionDocxExportService(
     ) {
         val colon = line.indexOf(':')
         if (colon >= 0) {
-            mixedParagraph(document, bold(line.substring(0, colon + 1)), plain(line.substring(colon + 1)))
+            mixedParagraph(
+                document,
+                bold(line.substring(0, colon + 1)),
+                plain(line.substring(colon + 1)),
+                spacingAfter = LETTER_SPACING_AFTER,
+            )
         } else {
-            paragraph(document, line)
+            paragraph(document, line, spacingAfter = LETTER_SPACING_AFTER)
         }
     }
 
@@ -1151,6 +1215,7 @@ class CautionDocxExportService(
         content: Map<String, String>,
         withCivilityPrefix: Boolean = false,
         width: Int = CONTENT_WIDTH,
+        gap: Int = SIGNATURE_GAP,
     ) {
         val table = document.createTable(2, 2)
         table.setWidthType(TableWidthType.DXA)
@@ -1183,7 +1248,7 @@ class CautionDocxExportService(
             bold = true,
             alignment = ParagraphAlignment.LEFT,
             width = half,
-            spacingBefore = SIGNATURE_GAP,
+            spacingBefore = gap,
         )
         setCell(
             table.getRow(1).getCell(1),
@@ -1191,7 +1256,7 @@ class CautionDocxExportService(
             bold = true,
             alignment = ParagraphAlignment.RIGHT,
             width = half,
-            spacingBefore = SIGNATURE_GAP,
+            spacingBefore = gap,
         )
     }
 
@@ -1308,10 +1373,11 @@ class CautionDocxExportService(
     private fun paragraph(
         document: XWPFDocument,
         text: String,
+        spacingAfter: Int = BODY_SPACING_AFTER,
     ) {
         val p = document.createParagraph()
         p.alignment = ParagraphAlignment.BOTH
-        p.spacingAfter = 160
+        p.spacingAfter = spacingAfter
         addRun(p, text)
     }
 
@@ -1320,10 +1386,11 @@ class CautionDocxExportService(
         document: XWPFDocument,
         vararg segments: Segment,
         alignment: ParagraphAlignment = ParagraphAlignment.BOTH,
+        spacingAfter: Int = BODY_SPACING_AFTER,
     ) {
         val p = document.createParagraph()
         p.alignment = alignment
-        p.spacingAfter = 160
+        p.spacingAfter = spacingAfter
         segments.forEach { seg -> addRun(p, seg.text, bold = seg.bold) }
     }
 
@@ -1404,6 +1471,10 @@ class CautionDocxExportService(
         const val BODY_SIZE = 11
         const val TITLE_SIZE = 14
 
+        /** Space below a body paragraph, in twips. The letter runs tighter so its signatures stay on the first sheet. */
+        const val BODY_SPACING_AFTER = 160
+        const val LETTER_SPACING_AFTER = 80
+
         const val PAGE_WIDTH = 11906
         const val PAGE_HEIGHT = 16838
 
@@ -1424,6 +1495,10 @@ class CautionDocxExportService(
         const val NOTIFICATION_MARGIN_LEFT = 2835
         const val NOTIFICATION_MARGIN_RIGHT = 793
         const val NOTIFICATION_CONTENT_WIDTH = PAGE_WIDTH - NOTIFICATION_MARGIN_LEFT - NOTIFICATION_MARGIN_RIGHT
+
+        /** The letter is a one-sheet document: trimmed vertical margins and signature gap keep the signatures off a second page. */
+        const val NOTIFICATION_MARGIN_VERTICAL = 964
+        const val NOTIFICATION_SIGNATURE_GAP = 200
 
         /** The fiche is an internal one-sheet form: tighter margins, smaller type, so its seven sections never spill onto a second page. */
         const val FICHE_MARGIN_HORIZONTAL = 1134
