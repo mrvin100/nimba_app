@@ -11,6 +11,13 @@ enum class CautionFieldType {
 
     /** A signatory's civility (Monsieur / Madame) — the frontend renders a select; blank means it is omitted from the document. */
     CIVILITY,
+
+    /**
+     * The lot of the tender this document covers — the frontend renders a select
+     * fed by the dossier's own "lots" list, so a lot is declared once on the
+     * dossier and only picked here. Blank on a single-lot request.
+     */
+    LOT,
 }
 
 /**
@@ -78,9 +85,16 @@ object CautionFieldRegistry {
             CautionFieldDefinition("signataire2Titre", "Titre du signataire 2", CautionFieldType.TEXT),
         ).map { it.copy(scope = CautionFieldScope.COMMON) }
 
-    /** Per-document fields common to every type but proper to each document (the amount and its currency differ from one lot to the next). */
+    /**
+     * Per-document fields common to every type but proper to each document. A
+     * multi-lot request issues one document per lot: [lot] says which one this
+     * document covers, and the amount and its currency follow from it. The lot
+     * is picked from the dossier's declared list, never retyped, and stays
+     * optional so a single-lot request has nothing extra to fill.
+     */
     private val PER_DOCUMENT_FIELDS =
         listOf(
+            CautionFieldDefinition("lot", "Lot", CautionFieldType.LOT, optional = true),
             CautionFieldDefinition("devise", "Devise", CautionFieldType.CURRENCY),
             CautionFieldDefinition("montant", "Montant", CautionFieldType.AMOUNT),
         ).map { it.copy(scope = CautionFieldScope.SPECIFIC) }
